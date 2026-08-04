@@ -1,0 +1,17 @@
+# 密钥
+.env
+
+# 运行产物
+projects/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 系统
+.DS_Store
+
+# Kimi Code 项目本地配置
+.kimi-code/local.toml
