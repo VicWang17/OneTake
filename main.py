@@ -92,5 +92,13 @@ def storyboard(
         typer.echo(f"  [{s['idx']:02d}] {s['duration']}s {s['purpose']}（{s['camera']}）{s['narration'][:20]}…")
 
 
+@app.command()
+def images(pid: str = typer.Option(..., "--pid", help="项目 ID")):
+    """P1：分镜图批量产出（角色锚点注入 + 参考图链，已产出的图自动跳过）。"""
+    result = storyboard_mod.create_images(pid)
+    typer.echo(f"\n分镜图完成：projects/{pid}/shots/ · 新生成 {result['made']} 张 · "
+               f"跳过 {result['skipped']} 张 · 成本 ¥{result['cost']:.2f}")
+
+
 if __name__ == "__main__":
     app()

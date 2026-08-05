@@ -87,10 +87,13 @@ def _call_image(conn, payload, tier, project_id):
     model = adapters.SEEDREAM_MODEL
     try:
         url, usage, latency = adapters.seedream_image(
-            payload["prompt"], payload.get("size", "1280x720"))
+            payload["prompt"], payload.get("size", "1280x720"),
+            reference_url=payload.get("reference_url"))
         cost = pricing.calc_cost(model, usage, n_images=1)
         dao.log_generation(conn, task_type="image", model=model, tier=tier,
-                           prompt=payload["prompt"], usage=usage,
+                           prompt=payload["prompt"],
+                           params={"reference": bool(payload.get("reference_url"))},
+                           usage=usage,
                            unit_price=pricing.PRICING[model].get("per_image", 0),
                            cost=cost, latency_ms=latency, project_id=project_id)
         return {"url": url, "usage": usage, "cost": cost, "model": model}

@@ -8,13 +8,23 @@ import json
 import time
 from pathlib import Path
 
+import requests
+
 from db import dao
+from gateway import core as gw
 from nodes import character as character_node
 from nodes import outline as outline_node
 from nodes import storyboard as storyboard_node
 
 ROOT = Path(__file__).resolve().parent.parent
 PROJECTS_DIR = ROOT / "projects"
+
+
+def _download(url: str, out: Path) -> None:
+    out.parent.mkdir(parents=True, exist_ok=True)
+    r = requests.get(url, timeout=120)
+    r.raise_for_status()
+    out.write_bytes(r.content)
 
 
 def create_outline(topic: str) -> dict:
@@ -64,3 +74,41 @@ def create_storyboard(topic: str | None = None, pid: str | None = None) -> dict:
     dao.update_project(conn, pid, status="storyboarded")
     conn.close()
     return {"pid": pid, "shots": shots, "character_sheet": sheet}
+
+
+def create_images(pid: str) -> dict:
+    """1.4 分镜图批量产出：角色锚点拼入 prompt + 参考图链（首镜图 → 后续镜头）。
+
+    幂等：已存在的图跳过。注意参考图 URL 有时效（约 24h），若首镜图为存量
+    （非本次新生成），参考图链不可用，后续镜头退化为仅文本锚点。
+    """
+    pdir = PROJECTS_DIR / pid
+    script_path = pdir / "script.json"
+    script = json.loads(script_path.read_text(encoding="utf-8"))
+    sheet = script.get("character_sheet", "")
+    shots_dir = pdir / "shots"
+    shots_dir.mkdir(exist_ok=True)
+
+    conn = dao.get_conn()
+    ref_url: str | None = None
+    made, skipped, cost = 0, 0, 0.0
+    for s in script["shots"]:
+        idx = int(s["idx"])
+        img = shots_dir / f"shot_{idx:02d}.png"
+        prompt = f"{sheet}，{s['visual_prompt']}" if sheet else s["visual_prompt"]
+        if img.exists():
+            skipped += 1
+        else:
+            r = gw.call("image", {"prompt": prompt, "reference_url": ref_url},
+                        project_id=pid)
+            _download(r["url"], img)
+            cost += r["cost"]
+            made += 1
+            if idx == 1:
+                ref_url = r["url"]  # 参考图链：首镜新图作为后续镜头的图像锚点
+            print(f"    shot {idx:02d} 分镜图 ¥{r['cost']:.2f}"
+                  f"{'（含参考图）' if ref_url and idx > 1 else ''}")
+        dao.update_shot(conn, f"{pid}-s{idx:02d}", status="imaged")
+    dao.update_project(conn, pid, status="imaged")
+    conn.close()
+    return {"pid": pid, "made": made, "skipped": skipped, "cost": cost}

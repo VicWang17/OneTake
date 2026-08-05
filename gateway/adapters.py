@@ -84,12 +84,15 @@ def _ark_client():
     return Ark(api_key=os.environ["ARK_API_KEY"])
 
 
-def seedream_image(prompt: str, size: str = "1280x720") -> tuple[str, dict, int]:
-    """文生图。返回 (image_url, usage, latency_ms)。"""
+def seedream_image(prompt: str, size: str = "1280x720",
+                   reference_url: str | None = None) -> tuple[str, dict, int]:
+    """文生图。支持参考图（图像锚点，角色一致性手段）。返回 (image_url, usage, latency_ms)。"""
     t0 = time.time()
-    resp = _ark_client().images.generate(
-        model=SEEDREAM_MODEL, prompt=prompt, size=size, response_format="url"
-    )
+    kwargs: dict = {"model": SEEDREAM_MODEL, "prompt": prompt,
+                    "size": size, "response_format": "url"}
+    if reference_url:
+        kwargs["image"] = reference_url
+    resp = _ark_client().images.generate(**kwargs)
     latency_ms = int((time.time() - t0) * 1000)
     url = resp.data[0].url
     usage = resp.usage.model_dump() if getattr(resp, "usage", None) else {}
