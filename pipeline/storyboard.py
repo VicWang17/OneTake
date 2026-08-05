@@ -11,6 +11,7 @@ from pathlib import Path
 import requests
 
 from db import dao
+from editing import ffmpeg
 from gateway import core as gw
 from nodes import character as character_node
 from nodes import outline as outline_node
@@ -112,3 +113,54 @@ def create_images(pid: str) -> dict:
     dao.update_project(conn, pid, status="imaged")
     conn.close()
     return {"pid": pid, "made": made, "skipped": skipped, "cost": cost}
+
+
+TOLERANCE = 0.2  # 台词时长容忍带 ±20%，以内由画面侧吸收，超出才动台词
+
+
+def align_audio(pid: str) -> dict:
+    """1.5 台词时长对齐：TTS 真实合成 → 实测时长回写 → 超 ±20% 改写（≤2 次）。
+
+    原则：时间轴的唯一事实源是音频。shots.duration 从 LLM 预估值覆写为
+    TTS 实测值；改写 ≤2 次仍越界的，标记 align=audio，P2 EDL 按音频排轴。
+    """
+    pdir = PROJECTS_DIR / pid
+    script_path = pdir / "script.json"
+    script = json.loads(script_path.read_text(encoding="utf-8"))
+    audio_dir = pdir / "audio"
+    audio_dir.mkdir(exist_ok=True)
+
+    conn = dao.get_conn()
+    rewritten, aligned_audio, ok = 0, 0, 0
+    for s in script["shots"]:
+        idx = int(s["idx"])
+        target = float(s["duration"])
+        lo, hi = target * (1 - TOLERANCE), target * (1 + TOLERANCE)
+        text, audio = s["narration"], audio_dir / f"shot_{idx:02d}.mp3"
+
+        for attempt in range(3):  # 原始 + 至多 2 次改写
+            if attempt > 0 or not audio.exists():
+                gw.call("tts", {"text": text, "out_path": audio}, project_id=pid)
+            actual = ffmpeg.probe_duration(audio)
+            if lo <= actual <= hi:
+                align = "ok"
+                ok += 1
+                break
+            if attempt < 2:
+                text = storyboard_node.rewrite_narration(text, actual, lo, hi, pid)
+                rewritten += 1
+        else:
+            align = "audio"  # 改写仍越界：以音频为准
+            aligned_audio += 1
+
+        if text != s["narration"]:
+            print(f"    shot {idx:02d} 台词改写：{s['narration'][:15]}… → {text[:15]}…")
+        s["narration"], s["duration"], s["align"] = text, actual, align
+        dao.update_shot(conn, f"{pid}-s{idx:02d}", duration=actual,
+                        narration=text, status="aligned")
+
+    script_path.write_text(json.dumps(script, ensure_ascii=False, indent=2),
+                           encoding="utf-8")
+    dao.update_project(conn, pid, status="aligned")
+    conn.close()
+    return {"pid": pid, "ok": ok, "rewritten": rewritten, "align_audio": aligned_audio}

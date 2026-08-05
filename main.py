@@ -100,5 +100,13 @@ def images(pid: str = typer.Option(..., "--pid", help="项目 ID")):
                f"跳过 {result['skipped']} 张 · 成本 ¥{result['cost']:.2f}")
 
 
+@app.command()
+def align(pid: str = typer.Option(..., "--pid", help="项目 ID")):
+    """P1：台词时长对齐（TTS 实测回写，超 ±20% 自动改写 ≤2 次）。"""
+    result = storyboard_mod.align_audio(pid)
+    typer.echo(f"\n时长对齐完成：projects/{pid} · 直接合格 {result['ok']} · "
+               f"触发改写 {result['rewritten']} · 以音频为准 {result['align_audio']}")
+
+
 if __name__ == "__main__":
     app()

@@ -107,3 +107,21 @@ def generate_storyboard(outline: dict, project_id: str) -> list[dict]:
             + "\n".join(f"{i}. {e}" for i, e in enumerate(errors, 1))
             + "\n请修正后重新输出完整 JSON（全量，不要只输出修改的部分）。")})
     raise RuntimeError(f"分镜表 {MAX_RETRIES} 次修正仍不合法，转人工。最后错误：{last_errors}")
+
+
+REWRITE_SYSTEM = """你是解说词编辑。用户会给你一句台词、它的真实朗读时长、目标时长范围。
+改写台词让朗读时长落入目标范围：过长则压缩（保留核心信息，删掉修饰），过短则自然扩写（补充细节，不得注水）。
+保持口语化与原有语气。输出严格 JSON：{"narration": "改写后的台词"}。只输出 JSON。"""
+
+
+def rewrite_narration(narration: str, actual: float, lo: float, hi: float,
+                      project_id: str) -> str:
+    """台词时长越界 → LLM 改写（给具体的时长目标，同错误回灌思想）。"""
+    user = (f"台词：{narration}\n真实朗读时长：{actual:.1f} 秒\n"
+            f"目标范围：{lo:.1f} - {hi:.1f} 秒")
+    r = gw.call("llm", {"system": REWRITE_SYSTEM, "user": user},
+                project_id=project_id)
+    new = (r["data"].get("narration") or "").strip()
+    if not new:
+        raise ValueError("改写结果为空")
+    return new
