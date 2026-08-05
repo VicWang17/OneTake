@@ -18,8 +18,9 @@ app = typer.Typer(help="OneTake · 端到端 AI 视频创作 Agent（P0 最小�
 @app.command()
 def run(
     script: Path = typer.Option(..., "--script", exists=True, help="固定文案路径"),
-    video_shots: int = typer.Option(1, "--video-shots",
-                                    help="前 N 个镜头用真实视频生成，其余图片填充（控成本）"),
+    video_shots: int = typer.Option(0, "--video-shots",
+                                    help="前 N 个镜头用真实视频生成，其余图片填充（控成本）。"
+                                         "默认 0=全图卡：Seedance 开通（需 ¥200 底额）推迟至 P2，见 DEVLOG 010"),
 ):
     """一条命令：固定文案 → projects/{pid}/final/draft.mp4。"""
     result = linear.run(script, n_video_shots=video_shots)
