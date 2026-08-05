@@ -96,7 +96,7 @@ def run(script_path: Path, n_video_shots: int = 1) -> dict:
 
         seg = dirs["clips"] / f"shot_{idx:02d}.mp4"
         visual = video_src if (use_video and video_src.exists()) else img
-        dur = ffmpeg.make_segment(visual, audio, seg, is_image=not visual == video_src)
+        dur = ffmpeg.make_segment(visual, audio, seg, is_image=(visual != video_src))
         dao.update_shot(conn, f"{pid}-s{idx:02d}", duration=dur, status="segmented")
         segments.append(seg)
         srt_entries.append((t, t + dur, s["narration"]))

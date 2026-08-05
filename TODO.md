@@ -1,7 +1,7 @@
 # OneTake · 开发任务清单
 
 > 功能导向、随时可更新。配合 `prd.md`（v2.0，活文档）使用；v1.1 PDF 仅作历史存档。
-> 最近更新：2026-08-04 · 当前阶段：**开工前核实全部完成（8/8），可进入 P0**
+> 最近更新：2026-08-05 · 当前阶段：**P0 基本完成（视频生成项阻塞于账号未开通 Seedance，见 0.5/0.6）**
 
 ## 使用说明
 
@@ -17,7 +17,7 @@
 | Phase | 目标 | 预算 | 状态 | 实际花费 |
 |---|---|---|---|---|
 | 开工前核实 | 价格/API/风险前置验证 | ¥0 | ✅ 8/8 完成 | |
-| P0 奠基（W1） | 固定文案 → 60s 无声草稿片 | ≤¥30 | ⬜ | |
+| P0 奠基（W1） | 固定文案 → 60s 无声草稿片 | ≤¥30 | ⚠️ 完成（视频模型待开通） | ¥2.21 |
 | P1 脚本分镜（W2） | 选题 → 分镜包（script.json + 图） | ≤¥20 | ⬜ | |
 | P2 端到端 v1（W3） | 选题一键 → 草稿成片（不可让渡） | ≤¥40 | ⬜ | |
 | P3 Agent 化（W4） | LangGraph + 断点续跑 + 成本报表 | ≤¥20 | ⬜ | |
@@ -53,10 +53,10 @@
 目标：所有外部依赖真实打通；最笨的线性代码证明「文案 → 视频」链路成立。**本周不写任何架构。**
 
 ### 0.1 仓库与环境
-- [ ] 建仓：`pyproject.toml`、`.env.example`、`.gitignore`（含 `projects/`、`.env`），目录按 prd.md 附录 A
-- [ ] Python 环境 + 依赖（openai SDK、火山方舟 SDK、edge-tts、FastAPI/uvicorn 先装上备用）
-- [ ] FFmpeg 环境接入：代码层 ffmpeg/ffprobe 路径走 `FFMPEG_PATH`（默认 `/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg`），并复跑中文硬字幕烧录样片确认（full 版已装好并实测通过）
-- [ ] `.env` 统一管理密钥，加载工具函数
+- [x] 建仓：`pyproject.toml`、`.env.example`、`.gitignore`（含 `projects/`、`.env`），目录按 prd.md 附录 A（uv 工程，2026-08-05）
+- [x] Python 环境 + 依赖（openai SDK、火山方舟 SDK、edge-tts、typer、python-dotenv、requests；FastAPI/uvicorn 推迟到 P4 serving 周再装）
+- [x] FFmpeg 环境接入：代码层 ffmpeg/ffprobe 路径走 `FFMPEG_PATH`（默认 `/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg`，见 `editing/ffmpeg.py`）；硬字幕烧录随 0.5 合成项一并实测
+- [x] `.env` 统一管理密钥，加载工具函数（python-dotenv，`gateway/adapters.py` 顶部 load_dotenv）
 
 ### 0.2 平台注册（充值策略：首批 ≤¥150，先耗尽免费额度再充）
 - [~] 火山引擎：✅ API Key 已验证可用（2026-08-04，正确路径：方舟控制台 console.volcengine.com/ark → API Key 管理；踩坑记录：统一密钥管理页建的 key 调方舟必 401）。待办：实名认证确认、开通 Seedream + Seedance 模型服务、**首充 ¥20–50**、确认 Seedream 按张计费是否在 token 免费额度内、控制台查看"超额后付费"、设消费告警。**已确认模型清单：`doubao-seedream-4-0-250828`（草稿图）、`doubao-seedream-5-0-pro-260628`（质量档）、`doubao-seedance-2-0-260128`（主力视频）、`doubao-seedance-2-5-260628`（已上线）、`deepseek-v4-flash-260425`（方舟侧 LLM 互备）均可用；注意 `doubao-seedance-1-5-pro-251215` 状态 Retiring，草稿档样片模式策略需在 P0 重定**
@@ -66,37 +66,37 @@
 - [ ] Pixabay Music 下载 5–10 首 BGM，建 `assets/bgm/` 与来源清单
 
 ### 0.3 数据层
-- [ ] `db/schema.sql`：projects / shots / generations / jobs / events / model_perf_daily / skills / memories（schema 一次到位，避免后期迁移）
-- [ ] `db/dao.py`：最小 CRUD（本周只用 projects / shots / generations）
+- [x] `db/schema.sql`：projects / shots / generations / jobs / events / model_perf_daily / skills / memories 八表一次到位（2026-08-05）
+- [x] `db/dao.py`：最小 CRUD（projects / shots / generations + today_spend 供熔断）
 
 ### 0.4 网关骨架（本周为内部库形态，P4 服务化）
-- [ ] 统一入口 `call(task_type, payload, tier)`（透传 + 日志）
-- [ ] 计费日志写 generations 表（模型/档位/用量/单价/成本）
-- [ ] 日预算熔断 `DAILY_BUDGET_LIMIT=15`
-- [ ] `pricing.py`：按开工前核实结论填单价表
+- [x] 统一入口 `call(task_type, payload, tier)`（`gateway/core.py`，透传 + 日志）
+- [x] 计费日志写 generations 表（模型/档位/用量/单价/成本，成功失败都记）
+- [x] 日预算熔断 `DAILY_BUDGET_LIMIT=15`（超上限抛 BudgetExceededError）
+- [x] `pricing.py`：按开工前核实结论填单价表（注明 2026-08-04 数据时点；seedance fast/mini 为占位价待 0.6 实测回填）
 
 ### 0.5 各能力单点打通
-- [ ] DeepSeek：文案 → 合法 JSON（结构化输出验证）
-- [ ] Seedream：第一张分镜图落盘 `projects/{pid}/shots/`
-- [ ] Seedance：第一段 5s 草稿视频（创建 → 轮询 → 下载全流程）
-- [ ] edge-tts：第一段中文配音 mp3 + 真实时长（带重试封装）
-- [ ] FFmpeg：视频段 + 音频 + 硬字幕 + BGM 合成 60s 样片
+- [x] DeepSeek：文案 → 合法 JSON（10 个分镜，narration 拼接与原文逐字一致，单次 ¥0.0076）
+- [x] Seedream：第一张分镜图落盘 `projects/{pid}/shots/`（1280x720，¥0.20/张，内容符合 prompt）
+- [!] Seedance：第一段 5s 草稿视频（创建 → 轮询 → 下载全流程）——**阻塞：账号未开通任何视频模型**（2.0/fast/mini/2.5/1.0-pro 全家族 9 个 ID 探测均 ModelNotOpen 或不存在；开通是控制台人工动作，见 DEVLOG 008）。调用代码（`gateway/adapters.py::seedance_video`）已就绪，控制台开通后 `--video-shots N` 复验
+- [x] edge-tts：第一段中文配音 mp3 + ffprobe 真实时长（重试封装已就位，本次一次成功）
+- [x] FFmpeg：视频段 + 音频 + 硬字幕 + BGM 合成 60s 样片（63.3s 草稿片实测：图卡 Ken Burns + AAC 配音 + Hiragino Sans GB 硬字幕；`assets/bgm/` 暂无文件，BGM 混音接口已留好）
 
 ### 0.6 供应商实测对比（成本策略的决策依据，剪映 JD"实验到上线"叙事的第一环）
-- [ ] Seedance 2.0 与 2.0-mini/fast 各跑一条 5s 样片（同 prompt 同参考图），查实测单价与质量
-- [ ] 记录实测单价、耗时、质量对比，定草稿档主力模型
+- [!] Seedance 2.0 与 2.0-mini/fast 各跑一条 5s 样片（同 prompt 同参考图），查实测单价与质量——**阻塞：同 0.5，账号未开通视频模型**，开通后优先补做
+- [!] 记录实测单价、耗时、质量对比，定草稿档主力模型——同上阻塞；pricing.py 中 fast/mini 为占位价，实测后回填
 - [ ] 回填单条成本目标到 prd.md 表 1-4 与本文件 P2/P7 验收标准
 
 ### 0.7 串联
-- [ ] `python main.py --script demo.txt` 一条命令产出 `draft.mp4`
-- [ ] `report` 命令雏形：本次运行各环节成本
+- [x] `uv run python main.py run --script examples/demo.txt` 一条命令产出 `projects/p20260805-150630/final/draft.mp4`（63.3s，854x480，含配音+硬字幕；`--video-shots N` 控制真实视频镜头数）
+- [x] `report` 命令雏形：按环节/模型汇总次数与成本 + 当日预算水位（支持 `-p <pid>` 单项目）
 
 ### P0 验收标准
-- [ ] 一条命令产出 60 秒可播放草稿片
-- [ ] report 能列出各环节成本
-- [ ] 供应商对比结论落档（写进 prd.md 3.6）
-- [ ] 本周总花费 ≤¥30
-- [ ] 红线：Seedance 2.0 两天调不通即切 2.0-mini/fast 或降 480p 验证，不阻塞（可灵暂缓后跨供应商互备暂无，已记入风险表）
+- [x] 一条命令产出 60 秒可播放草稿片（63.3s，抽帧目检字幕/画面/音轨正常）
+- [x] report 能列出各环节成本
+- [!] 供应商对比结论落档（写进 prd.md 3.6）——阻塞于 Seedance 未开通
+- [x] 本周总花费 ≤¥30（实际 ¥2.21）
+- [!] 红线：Seedance 2.0 两天调不通即切 2.0-mini/fast 或降 480p 验证，不阻塞——触发变体：非代码问题而是账号未开通，全家族均不可用；待控制台开通后复验。已通过「全图卡草稿片」保住 P0 主交付物
 
 ---
 
@@ -355,3 +355,4 @@
 - 2026-08-04 初版：基于 PRD v1.1 拆分；补充前置核实项
 - 2026-08-04 完成开工前核实（联网 + 本地实测），结论回填；发现 FFmpeg 阻塞项
 - 2026-08-04 **v2.0 对齐 prd.md**：新增目标岗位 B（剪映 AI 架构）；新增 P4（模型服务化+任务调度，W5）与 P5（可观测性+数据链路，W6）两个阶段；原 P4–P6 顺延为 P6–P8；P0 新增供应商实测对比任务（0.6）；数据层 schema 一次到位（含 jobs/events/model_perf_daily）；降级预案加入剪映 JD 底线说明
+- 2026-08-05 **P0 完成**：仓库骨架（uv 工程）、八表数据层、网关（统一入口/计费/日熔断/单价表）、DeepSeek/Seedream/edge-tts/FFmpeg 四项真实打通，一条命令产出 63.3s 草稿片（`projects/p20260805-150630/final/draft.mp4`），实际花费 ¥2.21。范围微调：① 草稿片采用「分镜图 Ken Burns 填充 + `--video-shots N` 控制真实视频镜头数」的混合策略（视频按 token 计费贵的成本控制手段）；② 0.5 Seedance 单点与 0.6 供应商对比因账号未开通视频模型（控制台人工动作）标记阻塞，非代码问题，开通后复验；③ FastAPI/uvicorn 推迟到 P4 serving 周再装
