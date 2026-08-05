@@ -10,7 +10,7 @@ from pathlib import Path
 import typer
 
 from db import dao
-from pipeline import linear
+from pipeline import linear, storyboard
 
 app = typer.Typer(help="OneTake · 端到端 AI 视频创作 Agent（P0 最小管线）")
 
@@ -59,6 +59,17 @@ def report(
 def gw_limit() -> float:
     from gateway.core import DAILY_BUDGET_LIMIT
     return DAILY_BUDGET_LIMIT
+
+
+@app.command()
+def outline(topic: str = typer.Option(..., "--topic", help="选题（一句话）")):
+    """P1：选题 → 大纲（含 LLM 自选风格）→ projects/{pid}/script.json。"""
+    result = storyboard.create_outline(topic)
+    o = result["outline"]
+    typer.echo(f"\n大纲已生成：projects/{result['pid']}/script.json")
+    typer.echo(f"  标题：{o['title']}（{o['target_duration']}s · {len(o['structure'])} 段）")
+    typer.echo(f"  风格：{o['style'].get('tone', '')[:40]}")
+    typer.echo(f"        {o['style'].get('visual', '')[:40]}")
 
 
 if __name__ == "__main__":

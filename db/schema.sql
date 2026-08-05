@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS projects (
     id          TEXT PRIMARY KEY,           -- pid，如 p20260805-001
     topic       TEXT NOT NULL,
     skill_id    TEXT,                       -- P6 起使用，P0 为 NULL
+    style_json  TEXT,                       -- P1 起：LLM 自选风格（项目级锁定）
     status      TEXT NOT NULL DEFAULT 'created',
     created_at  TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );

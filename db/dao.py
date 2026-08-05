@@ -26,7 +26,16 @@ def get_conn(db_path: Path | str | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     if not path.exists() or path.stat().st_size == 0 or not _has_tables(conn):
         conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """轻量迁移：老库缺列时 ALTER 补齐（SQLite 加列低成本）。"""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(projects)")}
+    if "style_json" not in cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN style_json TEXT")
+        conn.commit()
 
 
 def _has_tables(conn: sqlite3.Connection) -> bool:
@@ -55,6 +64,15 @@ def create_project(conn: sqlite3.Connection, topic: str, pid: str | None = None,
 
 def get_project(conn: sqlite3.Connection, pid: str) -> sqlite3.Row | None:
     return conn.execute("SELECT * FROM projects WHERE id = ?", (pid,)).fetchone()
+
+
+def update_project(conn: sqlite3.Connection, pid: str, **fields) -> None:
+    """更新 projects 行（如 style_json、status）。"""
+    if not fields:
+        return
+    cols = ", ".join(f"{k} = ?" for k in fields)
+    conn.execute(f"UPDATE projects SET {cols} WHERE id = ?", (*fields.values(), pid))
+    conn.commit()
 
 
 # ---------- shots ----------
