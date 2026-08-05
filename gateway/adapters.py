@@ -26,6 +26,26 @@ EDGE_TTS_VOICE = "zh-CN-YunxiNeural"
 
 # ---------- DeepSeek（OpenAI 兼容） ----------
 
+def deepseek_messages(messages: list[dict], max_retries: int = 3) -> tuple[str, dict, int]:
+    """多轮对话调用（原始文本返回）。用于错误回灌等需要对话上下文的场景。"""
+    from openai import OpenAI
+
+    client = OpenAI(api_key=os.environ["DEEPSEEK_API_KEY"], base_url=DEEPSEEK_BASE_URL)
+    last_err: Exception | None = None
+    for attempt in range(1, max_retries + 1):
+        t0 = time.time()
+        try:
+            resp = client.chat.completions.create(model=DEEPSEEK_MODEL, messages=messages)
+            latency_ms = int((time.time() - t0) * 1000)
+            usage = resp.usage.model_dump() if resp.usage else {}
+            return resp.choices[0].message.content, usage, latency_ms
+        except Exception as e:
+            last_err = e
+            if attempt < max_retries:
+                time.sleep(2 * attempt)
+    raise RuntimeError(f"DeepSeek 调用失败（{max_retries} 次）: {last_err}")
+
+
 def deepseek_json(system: str, user: str, max_retries: int = 3) -> tuple[dict, dict, int]:
     """结构化输出调用。返回 (parsed_json, usage, latency_ms)。"""
     import json

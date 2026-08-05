@@ -5,6 +5,7 @@
 用量→成本换算（pricing.py 为单价唯一事实源）。
 """
 
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -61,6 +62,14 @@ def call(task_type: str, payload: dict[str, Any], tier: str = "draft",
 def _call_llm(conn, payload, tier, project_id):
     model = adapters.DEEPSEEK_MODEL
     try:
+        if "messages" in payload:  # 多轮模式（错误回灌等），返回原始文本
+            text, usage, latency = adapters.deepseek_messages(payload["messages"])
+            cost = pricing.calc_cost(model, usage)
+            dao.log_generation(conn, task_type="llm", model=model, tier=tier,
+                               prompt=json.dumps(payload["messages"], ensure_ascii=False),
+                               usage=usage, cost=cost, latency_ms=latency,
+                               project_id=project_id)
+            return {"text": text, "usage": usage, "cost": cost, "model": model}
         data, usage, latency = adapters.deepseek_json(payload["system"], payload["user"])
         cost = pricing.calc_cost(model, usage)
         dao.log_generation(conn, task_type="llm", model=model, tier=tier,
@@ -69,8 +78,8 @@ def _call_llm(conn, payload, tier, project_id):
         return {"data": data, "usage": usage, "cost": cost, "model": model}
     except Exception as e:
         dao.log_generation(conn, task_type="llm", model=model, tier=tier,
-                           prompt=payload.get("user"), status="failed",
-                           error=str(e), project_id=project_id)
+                           prompt=payload.get("user") or json.dumps(payload.get("messages", []), ensure_ascii=False)[:500],
+                           status="failed", error=str(e), project_id=project_id)
         raise
 
 

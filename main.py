@@ -10,7 +10,8 @@ from pathlib import Path
 import typer
 
 from db import dao
-from pipeline import linear, storyboard
+from pipeline import linear
+from pipeline import storyboard as storyboard_mod
 
 app = typer.Typer(help="OneTake · 端到端 AI 视频创作 Agent（P0 最小管线）")
 
@@ -64,12 +65,29 @@ def gw_limit() -> float:
 @app.command()
 def outline(topic: str = typer.Option(..., "--topic", help="选题（一句话）")):
     """P1：选题 → 大纲（含 LLM 自选风格）→ projects/{pid}/script.json。"""
-    result = storyboard.create_outline(topic)
+    result = storyboard_mod.create_outline(topic)
     o = result["outline"]
     typer.echo(f"\n大纲已生成：projects/{result['pid']}/script.json")
     typer.echo(f"  标题：{o['title']}（{o['target_duration']}s · {len(o['structure'])} 段）")
     typer.echo(f"  风格：{o['style'].get('tone', '')[:40]}")
     typer.echo(f"        {o['style'].get('visual', '')[:40]}")
+
+
+@app.command()
+def storyboard(
+    topic: str | None = typer.Option(None, "--topic", help="选题（从大纲开始跑）"),
+    pid: str | None = typer.Option(None, "--pid", help="复用已有大纲的项目 ID"),
+):
+    """P1：大纲 → 分镜表（JSON Schema 校验 + 错误回灌）→ script.json 追加 shots。"""
+    if not topic and not pid:
+        raise typer.BadParameter("--topic 与 --pid 至少提供一个")
+    result = storyboard_mod.create_storyboard(topic=topic, pid=pid)
+    shots = result["shots"]
+    total = sum(s["duration"] for s in shots)
+    typer.echo(f"\n分镜表已生成：projects/{result['pid']}/script.json")
+    typer.echo(f"  {len(shots)} 个镜头 · 总时长 {total}s")
+    for s in shots:
+        typer.echo(f"  [{s['idx']:02d}] {s['duration']}s {s['purpose']}（{s['camera']}）{s['narration'][:20]}…")
 
 
 if __name__ == "__main__":
