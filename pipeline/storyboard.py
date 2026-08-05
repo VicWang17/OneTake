@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from db import dao
+from nodes import character as character_node
 from nodes import outline as outline_node
 from nodes import storyboard as storyboard_node
 
@@ -53,8 +54,13 @@ def create_storyboard(topic: str | None = None, pid: str | None = None) -> dict:
         dao.create_shot(conn, project_id=pid, idx=s["idx"], duration=s["duration"],
                         visual_prompt=s["visual_prompt"], narration=s["narration"],
                         status="storyboarded")
+
+    # 1.3 角色设定表：项目级文本锚点，1.4 出图时拼入每个 visual_prompt
+    sheet = character_node.generate_character_sheet(outline_data, shots, pid)
+    script["character_sheet"] = sheet
+
     script["shots"] = shots
     script_path.write_text(json.dumps(script, ensure_ascii=False, indent=2), encoding="utf-8")
     dao.update_project(conn, pid, status="storyboarded")
     conn.close()
-    return {"pid": pid, "shots": shots}
+    return {"pid": pid, "shots": shots, "character_sheet": sheet}

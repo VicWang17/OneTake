@@ -86,6 +86,8 @@ def storyboard(
     total = sum(s["duration"] for s in shots)
     typer.echo(f"\n分镜表已生成：projects/{result['pid']}/script.json")
     typer.echo(f"  {len(shots)} 个镜头 · 总时长 {total}s")
+    if sheet := result.get("character_sheet"):
+        typer.echo(f"  角色锚点：{sheet[:50]}…")
     for s in shots:
         typer.echo(f"  [{s['idx']:02d}] {s['duration']}s {s['purpose']}（{s['camera']}）{s['narration'][:20]}…")
 
