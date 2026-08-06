@@ -2,7 +2,7 @@
 
 端到端 AI 视频创作 Agent 工作台 + 其下的小型 AI 基础设施平台。输入选题，Agent 自动完成「大纲 → 脚本 → 分镜 → 素材生成 → 配音 → 自动剪辑 → 成片」，中间节点可查看、可修改、可重生成。
 
-> 当前进度：**P1 脚本与分镜生成已完成**（2026-08-05）——选题一句话 → 大纲 → 分镜表 → 角色锚点 → 分镜图 → 时长对齐，三个选题分镜包全部产出。路线与验收见 `TODO.md`，架构与双 JD 定位见 `prd.md`。
+> 当前进度：**P2 端到端 v1 已完成**（2026-08-06，里程碑）——选题一句话 → 大纲 → 分镜 → 角色锚点 → 分镜图 → 真视频 → EDL 渲染，一条命令产出 60s 成片（含配音/硬字幕/BGM 闪避），两处人工确认 + 幂等断点续跑。路线与验收见 `TODO.md`，架构与双 JD 定位见 `prd.md`。
 
 ## 快速开始
 
@@ -14,15 +14,12 @@ uv sync
 # 2. 配置密钥
 cp .env.example .env            # 填入 ARK_API_KEY / DEEPSEEK_API_KEY / DASHSCOPE_API_KEY
 
-# 3. P1：选题 → 分镜包（大纲 + 分镜表 + 角色锚点 + 分镜图 + 时长对齐）
-uv run python main.py storyboard --topic "为什么人睡觉会做梦"   # 大纲+分镜表+角色锚点
-uv run python main.py images --pid <pid>                        # 分镜图（参考图链一致性）
-uv run python main.py align --pid <pid>                         # TTS 实测时长回写对齐
+# 3. 端到端：选题一句话 → 60s 成片（约 8 分钟，~¥8）
+uv run python main.py run --topic "为什么人睡觉会做梦"
+uv run python main.py run --topic "..." --auto     # 跳过人工确认，全自动
+uv run python main.py run --pid <pid>              # 断点续跑（增量扣费，零重复）
 
-# 4. P0：固定文案 → 60s 草稿片
-uv run python main.py run --script examples/demo.txt
-
-# 5. 成本报表
+# 4. 成本报表
 uv run python main.py report                 # 全部调用
 uv run python main.py report -p <pid>        # 单项目
 ```
