@@ -29,20 +29,21 @@ PRICING = {
     # 文生图：Seedream 4.0 按张计费
     "doubao-seedream-4-0-250828": {"kind": "image", "per_image": 0.20, "currency": "CNY"},
     "doubao-seedream-5-0-pro-260628": {"kind": "image", "per_image": 0.30, "currency": "CNY"},
-    # 视频：Seedance 2.0 按 token 计费，折算为每秒参考价（5s 480p≈¥2.31、720p≈¥4.97，
-    # 官方文档口径，2026-08-04 核实；实际以响应 usage 的 token 数反算单价为准）
+    # 视频：Seedance 按 token 计费。实测发现：同分辨率时长下各档位 token 数相同
+    # （5s 480p 均为 50638），成本差异完全来自每 token 单价（2026-08-06 实测）
     "doubao-seedance-2-0-260128": {
         "kind": "video",
-        "per_second_480p": 2.31 / 5,   # ≈¥0.462/s
-        "per_second_720p": 4.97 / 5,   # ≈¥0.994/s
+        "per_mtok": 46.0,          # 元/百万 token（480p/720p 不含视频输入；实测吻合 ¥2.31/5s）
+        "per_mtok_with_video_input": 28.0,  # 含视频输入（图生视频/参考视频）
         "currency": "CNY",
     },
-    # 2.0 fast / mini：P0 实测回填（先用标准档半价占位，0.6 对比后修正）
     "doubao-seedance-2-0-fast-260128": {
-        "kind": "video", "per_second_480p": 0.23, "currency": "CNY", "note": "占位价，P0 实测回填",
+        "kind": "video", "per_mtok": 14.0, "currency": "CNY",
+        "note": "官方 AI Hub 价（2026-08-06）；实测 5s 480p = ¥0.71，草稿档主力",
     },
     "doubao-seedance-2-0-mini-260615": {
-        "kind": "video", "per_second_480p": 0.12, "currency": "CNY", "note": "占位价，P0 实测回填",
+        "kind": "video", "per_mtok": 14.0, "currency": "CNY",
+        "note": "⚠️ 占位：官方单价未查到（聚合站参考 ¥0.25/s），待控制台账单核实后修正",
     },
     # edge-tts：本地免费
     "edge-tts": {"kind": "tts", "per_char": 0.0, "currency": "CNY"},
@@ -67,6 +68,11 @@ def calc_cost(model: str, usage: dict | None = None, *, n_images: int = 1,
     if p["kind"] == "image":
         return p["per_image"] * n_images * rate
     if p["kind"] == "video":
+        # 优先按厂商返回的 token 用量精确计费；无 usage 时退化为按秒估算
+        usage = usage or {}
+        tokens = usage.get("completion_tokens")
+        if tokens and p.get("per_mtok"):
+            return tokens * p["per_mtok"] / 1e6 * rate
         key = "per_second_720p" if resolution.startswith("720") else "per_second_480p"
         return p.get(key, p.get("per_second_480p", 0.0)) * seconds * rate
     if p["kind"] == "tts":
