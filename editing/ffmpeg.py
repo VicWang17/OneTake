@@ -122,7 +122,8 @@ def finalize(video_in: Path, srt: Path, out: Path, *,
               f"[1:a]volume={bgm_volume * 3}[bgm0];"
               f"[bgm0][0:a]sidechaincompress=threshold=0.02:ratio=8:"
               f"attack=20:release=300[bg];"
-              f"[0:a][bg]amix=inputs=2:duration=first:dropout_transition=0[a]")
+              # normalize=0：关闭 amix 的 1/n 均分增益（人声曾被减半，用户反馈听不清）
+              f"[0:a][bg]amix=inputs=2:duration=first:normalize=0:dropout_transition=0[a]")
         cmd += ["-filter_complex", fc, "-map", "[v]", "-map", "[a]",
                 "-t", f"{dur:.3f}"]
     else:
