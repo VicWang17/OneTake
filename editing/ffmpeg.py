@@ -65,6 +65,7 @@ def make_segment(visual: Path, audio: Path, out: Path, *,
         cmd = [FFMPEG, "-y", "-stream_loop", "-1", "-i", str(visual),
                "-i", str(audio), "-t", f"{dur:.3f}",
                "-vf", _video_vf(),
+               "-map", "0:v", "-map", "1:a",  # 显式选流：画面取视频、声音取 TTS（丢弃 Seedance 内嵌音轨）
                "-c:v", "libx264", "-pix_fmt", "yuv420p",
                "-af", "aresample=44100", "-c:a", "aac", "-b:a", "128k",
                "-movflags", "+faststart", str(out)]
@@ -146,6 +147,7 @@ def _make_edl_segment(item: dict, audio: Path, out: Path) -> None:
         vf = f"setpts={factor:.4f}*PTS," + vf
     cmd = [FFMPEG, "-y", "-i", item["src"], "-i", str(audio),
            "-vf", vf, "-t", f"{dur:.3f}",
+           "-map", "0:v", "-map", "1:a",  # 显式选流：画面取视频、声音取 TTS（丢弃 Seedance 内嵌音轨）
            "-c:v", "libx264", "-pix_fmt", "yuv420p",
            "-af", "aresample=44100", "-c:a", "aac", "-b:a", "128k",
            "-movflags", "+faststart", str(out)]
