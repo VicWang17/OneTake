@@ -10,9 +10,13 @@ from pathlib import Path
 import typer
 
 from db import dao
+from editing import edl as edl_mod
+from editing import ffmpeg
 from pipeline import linear
 from pipeline import storyboard as storyboard_mod
 from pipeline import videos as videos_mod
+
+ROOT = Path(__file__).resolve().parent
 
 app = typer.Typer(help="OneTake · 端到端 AI 视频创作 Agent（P0 最小管线）")
 
@@ -121,6 +125,17 @@ def videos(
                f"失败 {result['failed']} · 成本 ¥{result['cost']}")
     if result.get("failed_idx"):
         typer.echo(f"  失败镜头：{result['failed_idx']}，可用 --shots 单独重跑")
+
+
+@app.command()
+def render(pid: str = typer.Option(..., "--pid", help="项目 ID")):
+    """P2：EDL 时间线生成 + 渲染成片（粒度对齐 + 硬字幕 + BGM 人声闪避）。"""
+    edl = edl_mod.build_edl(pid)
+    out = ROOT / "projects" / pid / "final" / "draft.mp4"
+    ffmpeg.render_edl(edl, out)
+    typer.echo(f"\n成片完成：{out}")
+    typer.echo(f"  时长 {edl['duration']:.1f}s · {len(edl['tracks']['video'])} 个镜头 · "
+               f"BGM {'有（闪避）' if edl['tracks'].get('bgm') else '无'}")
 
 
 if __name__ == "__main__":
