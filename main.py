@@ -12,6 +12,7 @@ import typer
 from db import dao
 from pipeline import linear
 from pipeline import storyboard as storyboard_mod
+from pipeline import videos as videos_mod
 
 app = typer.Typer(help="OneTake · 端到端 AI 视频创作 Agent（P0 最小管线）")
 
@@ -106,6 +107,20 @@ def align(pid: str = typer.Option(..., "--pid", help="项目 ID")):
     result = storyboard_mod.align_audio(pid)
     typer.echo(f"\n时长对齐完成：projects/{pid} · 直接合格 {result['ok']} · "
                f"触发改写 {result['rewritten']} · 以音频为准 {result['align_audio']}")
+
+
+@app.command()
+def videos(
+    pid: str = typer.Option(..., "--pid", help="项目 ID"),
+    shots: str | None = typer.Option(None, "--shots", help="只重跑指定镜头，如 3,7"),
+):
+    """P2：批量生成分镜视频（并发 ≤5，重试 ≤3，已有跳过，失败可单独重跑）。"""
+    only = [int(x) for x in shots.split(",")] if shots else None
+    result = videos_mod.batch_generate_videos(pid, only_shots=only)
+    typer.echo(f"\n视频批量完成：projects/{pid}/clips/ · 成功 {result['succeeded']} · "
+               f"失败 {result['failed']} · 成本 ¥{result['cost']}")
+    if result.get("failed_idx"):
+        typer.echo(f"  失败镜头：{result['failed_idx']}，可用 --shots 单独重跑")
 
 
 if __name__ == "__main__":
