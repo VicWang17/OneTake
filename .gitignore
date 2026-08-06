@@ -15,3 +15,9 @@ venv/
 
 # Kimi Code 项目本地配置
 .kimi-code/local.toml
+
+# BGM 音乐文件（体积大 + 版权，来源清单另存）
+assets/bgm/*.mp3
+assets/bgm/*.wav
+assets/bgm/*.m4a
+
