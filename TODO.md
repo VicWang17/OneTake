@@ -143,8 +143,8 @@
 **开工前提（W3 第一天）**：充值 ¥200 底额并开通 Seedance 视频模型（2.0/2.0-fast/2.0-mini 三个），复验 0.5 单点 + 补做 0.6 供应商对比（DEVLOG 010）
 
 ### 2.0 延期项补做
-- [ ] 充值 ¥200 底额 + 开通 Seedance 2.0/fast/mini（控制台）
-- [ ] `--video-shots 1` 复验 Seedance 单点（创建 → 轮询 → 下载全流程）
+- [x] 充值 ¥200 底额 + 开通 Seedance 2.0/fast/mini（控制台，2026-08-06）
+- [x] 复验 Seedance 单点（创建 → 轮询 → 下载全流程）：5s 480p 一次成功，耗时 150.7s，50638 tokens，实测 ¥2.31 与官方口径完全一致（`projects/p0-probe/clips/seedance_probe.mp4`，抽帧目检画面符合 prompt）
 - [ ] 0.6 供应商对比：2.0 与 2.0-mini/fast 各一条 5s 样片，实测单价回填 `pricing.py` 占位价 + 结论落档 prd.md 3.6
 
 ### 2.1 视频生成批量管理（本周为简易队列，P4 迁移到调度器）
