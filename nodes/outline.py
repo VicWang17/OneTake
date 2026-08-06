@@ -30,9 +30,13 @@ OUTLINE_SYSTEM = """你是短视频策划。用户给一个选题，输出严格
 REQUIRED_KEYS = {"title", "logline", "audience", "target_duration", "structure", "style"}
 
 
-def generate_outline(topic: str, project_id: str) -> dict:
-    """选题 → 大纲 dict（经网关计费）。校验缺字段即抛错（重试在调用方）。"""
-    r = gw.call("llm", {"system": OUTLINE_SYSTEM, "user": f"选题：{topic}"},
+def generate_outline(topic: str, project_id: str, feedback: str | None = None) -> dict:
+    """选题 → 大纲 dict（经网关计费）。校验缺字段即抛错（重试在调用方）。
+    feedback：脚本确认节点打回时的修改意见，注入 prompt 重新生成。"""
+    user = f"选题：{topic}"
+    if feedback:
+        user += f"\n\n上次的大纲被退回，修改意见（请采纳并重新设计）：{feedback}"
+    r = gw.call("llm", {"system": OUTLINE_SYSTEM, "user": user},
                 project_id=project_id)
     data = r["data"]
     missing = REQUIRED_KEYS - set(data)

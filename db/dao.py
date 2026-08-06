@@ -105,6 +105,12 @@ def list_shots(conn: sqlite3.Connection, project_id: str) -> list[sqlite3.Row]:
     ).fetchall()
 
 
+def delete_shots(conn: sqlite3.Connection, project_id: str) -> None:
+    """删除项目全部分镜（脚本打回重生成时用）。"""
+    conn.execute("DELETE FROM shots WHERE project_id = ?", (project_id,))
+    conn.commit()
+
+
 # ---------- generations（计费日志） ----------
 
 def log_generation(conn: sqlite3.Connection, *, task_type: str, model: str,

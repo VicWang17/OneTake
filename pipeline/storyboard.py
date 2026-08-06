@@ -28,7 +28,7 @@ def _download(url: str, out: Path) -> None:
     out.write_bytes(r.content)
 
 
-def create_outline(topic: str) -> dict:
+def create_outline(topic: str, feedback: str | None = None) -> dict:
     """1.1 大纲生成：建项目 → LLM 大纲 → script.json + 风格入库。"""
     pid = time.strftime("p%Y%m%d-%H%M%S")
     pdir = PROJECTS_DIR / pid
@@ -37,7 +37,7 @@ def create_outline(topic: str) -> dict:
     conn = dao.get_conn()
     dao.create_project(conn, topic=topic, pid=pid)
 
-    data = outline_node.generate_outline(topic, pid)
+    data = outline_node.generate_outline(topic, pid, feedback=feedback)
     (pdir / "script.json").write_text(
         json.dumps({"topic": topic, "outline": data}, ensure_ascii=False, indent=2),
         encoding="utf-8")
@@ -47,15 +47,24 @@ def create_outline(topic: str) -> dict:
     return {"pid": pid, "outline": data}
 
 
-def create_storyboard(topic: str | None = None, pid: str | None = None) -> dict:
-    """1.2 分镜表：读大纲（已有 pid 或现场生成）→ LLM 分镜表（校验回灌）→ 落盘 + 入库。"""
+def create_storyboard(topic: str | None = None, pid: str | None = None,
+                      feedback: str | None = None) -> dict:
+    """1.2 分镜表：读大纲（已有 pid 或现场生成）→ LLM 分镜表（校验回灌）→ 落盘 + 入库。
+    pid + feedback：脚本确认打回——删除旧分镜，带意见全量重生成（大纲/分镜/锚点）。"""
     conn = dao.get_conn()
-    if pid:
+    if pid and feedback:
+        script_path = PROJECTS_DIR / pid / "script.json"
+        script = json.loads(script_path.read_text(encoding="utf-8"))
+        topic = script["topic"]
+        dao.delete_shots(conn, pid)
+        outline_data = outline_node.generate_outline(topic, pid, feedback=feedback)
+        script = {"topic": topic, "outline": outline_data}
+    elif pid:
         script_path = PROJECTS_DIR / pid / "script.json"
         script = json.loads(script_path.read_text(encoding="utf-8"))
         outline_data = script["outline"]
     else:
-        result = create_outline(topic)
+        result = create_outline(topic, feedback=feedback)
         pid, outline_data = result["pid"], result["outline"]
         script_path = PROJECTS_DIR / pid / "script.json"
         script = json.loads(script_path.read_text(encoding="utf-8"))
@@ -113,6 +122,31 @@ def create_images(pid: str) -> dict:
     dao.update_project(conn, pid, status="imaged")
     conn.close()
     return {"pid": pid, "made": made, "skipped": skipped, "cost": cost}
+
+
+def regenerate_images(pid: str, feedback_map: dict[int, str]) -> dict:
+    """分镜图确认打回：按镜头号重画（可带修改意见），同时作废对应旧视频。"""
+    pdir = PROJECTS_DIR / pid
+    script = json.loads((pdir / "script.json").read_text(encoding="utf-8"))
+    sheet = script.get("character_sheet", "")
+    shots = {int(s["idx"]): s for s in script["shots"]}
+
+    conn = dao.get_conn()
+    cost = 0.0
+    for idx, fb in sorted(feedback_map.items()):
+        s = shots[idx]
+        prompt = f"{sheet}，{s['visual_prompt']}"
+        if fb:
+            prompt += f"。修改意见（请采纳）：{fb}"
+        r = gw.call("image", {"prompt": prompt}, project_id=pid)
+        _download(r["url"], pdir / "shots" / f"shot_{idx:02d}.png")
+        cost += r["cost"]
+        stale = pdir / "clips" / f"shot_{idx:02d}_src.mp4"  # 旧视频作废，批量时重生成
+        stale.unlink(missing_ok=True)
+        dao.update_shot(conn, f"{pid}-s{idx:02d}", status="imaged")
+        print(f"    shot {idx:02d} 重画 ¥{r['cost']:.2f}{'（带意见）' if fb else ''}")
+    conn.close()
+    return {"pid": pid, "regenerated": len(feedback_map), "cost": cost}
 
 
 TOLERANCE = 0.2  # 台词时长容忍带 ±20%，以内由画面侧吸收，超出才动台词

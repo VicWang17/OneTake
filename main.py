@@ -12,7 +12,7 @@ import typer
 from db import dao
 from editing import edl as edl_mod
 from editing import ffmpeg
-from pipeline import linear
+from pipeline import endtoend, linear
 from pipeline import storyboard as storyboard_mod
 from pipeline import videos as videos_mod
 
@@ -23,18 +23,29 @@ app = typer.Typer(help="OneTake · 端到端 AI 视频创作 Agent（P0 最小�
 
 @app.command()
 def run(
-    script: Path = typer.Option(..., "--script", exists=True, help="固定文案路径"),
+    script: Path = typer.Option(None, "--script", exists=True, help="固定文案路径（P0 线性管线）"),
+    topic: str = typer.Option(None, "--topic", help="选题（P2 端到端管线）"),
+    pid: str = typer.Option(None, "--pid", help="断点续跑已有项目"),
+    auto: bool = typer.Option(False, "--auto", help="跳过两处人工确认，全自动"),
     video_shots: int = typer.Option(0, "--video-shots",
-                                    help="前 N 个镜头用真实视频生成，其余图片填充（控成本）。"
-                                         "默认 0=全图卡：Seedance 开通（需 ¥200 底额）推迟至 P2，见 DEVLOG 010"),
+                                    help="P0 管线专用：前 N 个镜头用真实视频生成"),
 ):
-    """一条命令：固定文案 → projects/{pid}/final/draft.mp4。"""
-    result = linear.run(script, n_video_shots=video_shots)
-    typer.echo(
-        f"\n完成：{result['draft']}\n"
-        f"  时长 {result['duration']:.1f}s · {result['shots']} 个分镜 · "
-        f"本次生成成本约 ¥{result['cost']:.2f}（明细见 report）"
-    )
+    """一条命令出片：--topic 选题端到端（推荐）；--script 固定文案（P0 路径）；--pid 续跑。"""
+    if topic or pid:
+        result = endtoend.run_topic(topic, auto=auto, pid=pid)
+        typer.echo(f"\n完成：{result['draft']}\n"
+                   f"  时长 {result['duration']:.1f}s · 耗时 {result['minutes']:.1f} 分钟 · "
+                   f"成本 ¥{result['cost']:.2f}")
+        return
+    if script:
+        result = linear.run(script, n_video_shots=video_shots)
+        typer.echo(
+            f"\n完成：{result['draft']}\n"
+            f"  时长 {result['duration']:.1f}s · {result['shots']} 个分镜 · "
+            f"本次生成成本约 ¥{result['cost']:.2f}（明细见 report）"
+        )
+        return
+    raise typer.BadParameter("请提供 --topic、--pid 或 --script")
 
 
 @app.command()
