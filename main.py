@@ -305,5 +305,12 @@ def jobs(
     conn.close()
 
 
+@app.command()
+def stats():
+    """P5 系统仪表盘：成本/调用/模型表现/队列/告警，一屏看全。"""
+    from observability import stats as stats_mod
+    typer.echo(stats_mod.render(stats_mod.collect()))
+
+
 if __name__ == "__main__":
     app()
