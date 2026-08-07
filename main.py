@@ -111,33 +111,94 @@ def _cli_interrupt(payload: dict):
 
 @app.command()
 def report(
-    project: str | None = typer.Option(None, "--project", "-p", help="只看某个项目"),
+    project: str | None = typer.Option(None, "--project", "-p", help="单项目成本明细"),
 ):
-    """成本报表：按环节（task_type）汇总次数与花费，含当日预算水位。"""
+    """成本报表（3.3 完整版）：默认项目总览 + 全局环节/档位切片；-p 单条成本明细。"""
     conn = dao.get_conn()
     rows = dao.list_generations(conn, project_id=project)
-    title = f"项目 {project}" if project else "全部调用"
-    typer.echo(f"== OneTake 成本报表（{title}） ==")
+    real = [r for r in rows if r["status"] != "cache_hit"]
+    hits = [r for r in rows if r["status"] == "cache_hit"]
+
+    if project:
+        _report_project(conn, project, real, hits)
+    else:
+        _report_global(conn, real, hits)
+
+    spent = dao.today_spend(conn)
+    typer.echo(f"\n今日已花费 ¥{spent:.2f} / 日熔断上限 ¥{gw_limit():.2f}")
+    conn.close()
+
+
+def _savings_estimate(real: list, hits: list) -> float:
+    """缓存节省估算：命中次数 × 同（环节×模型）真实调用的平均成本。"""
+    avg: dict[tuple[str, str], float] = {}
+    groups: dict[tuple[str, str], list] = {}
+    for r in real:
+        groups.setdefault((r["task_type"], r["model"]), []).append(float(r["cost"]))
+    for k, v in groups.items():
+        avg[k] = sum(v) / len(v)
+    return sum(avg.get((h["task_type"], h["model"]), 0.0) for h in hits)
+
+
+def _report_project(conn, pid: str, real: list, hits: list) -> None:
+    """单项目明细：按环节成本与占比 + 单条成本对标 + 命中率。"""
+    proj = dao.get_project(conn, pid)
+    n_shots = len(dao.list_shots(conn, pid))
+    total = sum(float(r["cost"]) for r in real)
+    typer.echo(f"== 单条成本报表 · 项目 {pid} ==")
+    if proj:
+        typer.echo(f"选题：{proj['topic'][:40]} · 状态：{proj['status']} · {n_shots} 个镜头")
+    by_type: dict[str, list] = {}
+    for r in real:
+        by_type.setdefault(r["task_type"], []).append(r)
+    typer.echo(f"\n{'环节':<8}{'次数':>4} {'成本(¥)':>10} {'占比':>8}")
+    for tt, rs in sorted(by_type.items(), key=lambda x: -sum(float(r['cost']) for r in x[1])):
+        cost = sum(float(r["cost"]) for r in rs)
+        pct = cost / total * 100 if total else 0
+        typer.echo(f"{tt:<8}{len(rs):>4} {cost:>10.4f} {pct:>7.1f}%")
+    typer.echo(f"{'合计':<12}{len(real):>4} {total:>10.4f}")
+    if n_shots:
+        typer.echo(f"\n单条成片成本：¥{total:.2f}（{n_shots} 镜，单镜 ¥{total / n_shots:.2f}）"
+                   f"（草稿档目标 ≤¥8：{'✅' if total <= 8 else '❌'}）")
+    if hits:
+        typer.echo(f"缓存命中 {len(hits)} 次，等效节省约 ¥{_savings_estimate(real, hits):.2f}（估算）")
+
+
+def _report_global(conn, real: list, hits: list) -> None:
+    """全局：项目总览 + 环节×模型 + 档位拆分 + 命中率。"""
+    typer.echo("== OneTake 成本报表 · 项目总览 ==")
+    typer.echo(f"{'项目':<20}{'镜头':>4} {'总成本':>9} {'单镜':>7}  状态")
+    for p in dao.list_projects(conn):
+        prows = [r for r in real if r["project_id"] == p["id"]]
+        cost = sum(float(r["cost"]) for r in prows)
+        n = len(dao.list_shots(conn, p["id"]))
+        per = cost / n if n else 0
+        typer.echo(f"{p['id']:<20}{n:>4} {cost:>9.2f} {per:>7.2f}  {p['status']}")
+
+    typer.echo("\n== 按环节 × 模型 ==")
     typer.echo(f"{'环节':<8}{'模型':<34}{'次数':>4} {'成本(¥)':>10}")
     by_type: dict[tuple[str, str], list] = {}
-    hits = 0
-    for r in rows:
-        if r["status"] == "cache_hit":
-            hits += 1
-            continue
+    for r in real:
         by_type.setdefault((r["task_type"], r["model"]), []).append(r)
     total = 0.0
     for (tt, model), rs in sorted(by_type.items()):
         cost = sum(float(r["cost"]) for r in rs)
         total += cost
         typer.echo(f"{tt:<8}{model:<34}{len(rs):>4} {cost:>10.4f}")
-    typer.echo(f"{'合计':<44}{len(rows) - hits:>4} {total:>10.4f}")
-    if rows:
-        typer.echo(f"缓存命中 {hits} 次 / 总调用 {len(rows)} 次，命中率 {hits / len(rows) * 100:.1f}%")
+    typer.echo(f"{'合计':<44}{len(real):>4} {total:>10.4f}")
 
-    spent = dao.today_spend(conn)
-    typer.echo(f"\n今日已花费 ¥{spent:.2f} / 日熔断上限 ¥{gw_limit():.2f}")
-    conn.close()
+    typer.echo("\n== 按档位 ==")
+    by_tier: dict[str, list] = {}
+    for r in real:
+        by_tier.setdefault(r["tier"], []).append(r)
+    for tier, rs in sorted(by_tier.items()):
+        cost = sum(float(r["cost"]) for r in rs)
+        typer.echo(f"{tier:<10}{len(rs):>4} 次  ¥{cost:.2f}")
+
+    if real or hits:
+        rate = len(hits) / (len(real) + len(hits)) * 100
+        typer.echo(f"\n缓存命中 {len(hits)} 次 / 总调用 {len(real) + len(hits)} 次，命中率 {rate:.1f}%"
+                   f"（等效节省约 ¥{_savings_estimate(real, hits):.2f}）")
 
 
 def gw_limit() -> float:

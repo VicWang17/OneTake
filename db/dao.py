@@ -70,6 +70,10 @@ def get_project(conn: sqlite3.Connection, pid: str) -> sqlite3.Row | None:
     return conn.execute("SELECT * FROM projects WHERE id = ?", (pid,)).fetchone()
 
 
+def list_projects(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    return conn.execute("SELECT * FROM projects ORDER BY created_at").fetchall()
+
+
 def update_project(conn: sqlite3.Connection, pid: str, **fields) -> None:
     """更新 projects 行（如 style_json、status）。"""
     if not fields:
