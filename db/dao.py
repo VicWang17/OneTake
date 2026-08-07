@@ -36,6 +36,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "style_json" not in cols:
         conn.execute("ALTER TABLE projects ADD COLUMN style_json TEXT")
         conn.commit()
+    gcols = {r["name"] for r in conn.execute("PRAGMA table_info(generations)")}
+    if "result_json" not in gcols:
+        conn.execute("ALTER TABLE generations ADD COLUMN result_json TEXT")
+        conn.commit()
 
 
 def _has_tables(conn: sqlite3.Connection) -> bool:
@@ -119,19 +123,28 @@ def log_generation(conn: sqlite3.Connection, *, task_type: str, model: str,
                    unit_price: float = 0.0, cost: float = 0.0,
                    latency_ms: int | None = None, status: str = "succeeded",
                    error: str | None = None, file_path: str | None = None,
-                   project_id: str | None = None, idem_key: str | None = None) -> str:
+                   project_id: str | None = None, idem_key: str | None = None,
+                   result_json: str | None = None) -> str:
     gid = _new_id()
     conn.execute(
         "INSERT INTO generations"
         " (id, idem_key, project_id, task_type, model, tier, prompt, params,"
-        "  usage_json, unit_price, cost, latency_ms, status, error, file_path)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "  usage_json, unit_price, cost, latency_ms, status, error, file_path, result_json)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (gid, idem_key, project_id, task_type, model, tier, prompt,
          _dump(params), _dump(usage), unit_price, cost, latency_ms, status,
-         error, file_path),
+         error, file_path, result_json),
     )
     conn.commit()
     return gid
+
+
+def find_generation_by_idem(conn: sqlite3.Connection, idem_key: str) -> sqlite3.Row | None:
+    """按幂等键查成功调用记录（缓存命中依据）。"""
+    return conn.execute(
+        "SELECT * FROM generations WHERE idem_key = ? AND status = 'succeeded'",
+        (idem_key,),
+    ).fetchone()
 
 
 def today_spend(conn: sqlite3.Connection) -> float:

@@ -69,30 +69,32 @@ def run(script_path: Path, n_video_shots: int = 1) -> dict:
     print(f"    {len(shots)} 个分镜，LLM 成本 ¥{r['cost']:.4f}")
 
     # 2. 逐镜头素材：分镜图（全部）+ 视频（前 n_video_shots 个）+ 配音
+    #    P3 起幂等收敛到网关：每次调用过缓存，命中零成本，参数变化自动重生成
     segments, srt_entries, t = [], [], 0.0
     total_cost = r["cost"]
     for s in shots:
         idx = int(s["idx"])
         img = dirs["shots"] / f"shot_{idx:02d}.png"
-        if not img.exists():
-            ri = gw.call("image", {"prompt": s["visual_prompt"]}, project_id=pid)
+        ri = gw.call("image", {"prompt": s["visual_prompt"], "out_path": str(img)},
+                     project_id=pid)
+        if not ri.get("cached"):
             _download(ri["url"], img)
             total_cost += ri["cost"]
             print(f"    shot {idx:02d} 分镜图 ¥{ri['cost']:.2f}")
 
         video_src = dirs["clips"] / f"shot_{idx:02d}_src.mp4"
         use_video = idx <= n_video_shots
-        if use_video and not video_src.exists():
+        if use_video:
             rv = gw.call("video", {
-                "prompt": s["visual_prompt"], "out_path": video_src,
+                "prompt": s["visual_prompt"], "out_path": str(video_src),
                 "seconds": 5, "resolution": "480p",
             }, project_id=pid)
             total_cost += rv["cost"]
-            print(f"    shot {idx:02d} 视频 ¥{rv['cost']:.2f}（{rv['latency_ms'] / 1000:.0f}s）")
+            if not rv.get("cached"):
+                print(f"    shot {idx:02d} 视频 ¥{rv['cost']:.2f}（{rv['latency_ms'] / 1000:.0f}s）")
 
         audio = dirs["audio"] / f"shot_{idx:02d}.mp3"
-        if not audio.exists():
-            gw.call("tts", {"text": s["narration"], "out_path": audio}, project_id=pid)
+        gw.call("tts", {"text": s["narration"], "out_path": str(audio)}, project_id=pid)
 
         seg = dirs["clips"] / f"shot_{idx:02d}.mp4"
         visual = video_src if (use_video and video_src.exists()) else img

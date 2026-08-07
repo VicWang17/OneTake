@@ -89,8 +89,9 @@ def create_storyboard(topic: str | None = None, pid: str | None = None,
 def create_images(pid: str) -> dict:
     """1.4 分镜图批量产出：角色锚点拼入 prompt + 参考图链（首镜图 → 后续镜头）。
 
-    幂等：已存在的图跳过。注意参考图 URL 有时效（约 24h），若首镜图为存量
-    （非本次新生成），参考图链不可用，后续镜头退化为仅文本锚点。
+    P3 起幂等收敛到网关：不再按文件存在跳过，每次调用都过网关缓存——
+    内容相同 → cache_hit 零成本；prompt 变化 → 新 idem_key 自动重生成。
+    参考图改用本地首图的 base64（内容稳定、不受 URL 过期影响），保证 key 跨运行一致。
     """
     pdir = PROJECTS_DIR / pid
     script_path = pdir / "script.json"
@@ -100,28 +101,34 @@ def create_images(pid: str) -> dict:
     shots_dir.mkdir(exist_ok=True)
 
     conn = dao.get_conn()
-    ref_url: str | None = None
-    made, skipped, cost = 0, 0, 0.0
+    first_img = shots_dir / "shot_01.png"
+    made, hits, cost = 0, 0, 0.0
     for s in script["shots"]:
         idx = int(s["idx"])
         img = shots_dir / f"shot_{idx:02d}.png"
         prompt = f"{sheet}，{s['visual_prompt']}" if sheet else s["visual_prompt"]
-        if img.exists():
-            skipped += 1
+        payload: dict = {"prompt": prompt, "out_path": str(img)}
+        if idx > 1 and first_img.exists():  # 参考图链：本地首图 base64（内容寻址稳定）
+            payload["reference_url"] = _data_url(first_img)
+        r = gw.call("image", payload, project_id=pid)
+        if r.get("cached"):
+            hits += 1
         else:
-            r = gw.call("image", {"prompt": prompt, "reference_url": ref_url},
-                        project_id=pid)
             _download(r["url"], img)
-            cost += r["cost"]
             made += 1
-            if idx == 1:
-                ref_url = r["url"]  # 参考图链：首镜新图作为后续镜头的图像锚点
+            cost += r["cost"]
             print(f"    shot {idx:02d} 分镜图 ¥{r['cost']:.2f}"
-                  f"{'（含参考图）' if ref_url and idx > 1 else ''}")
+                  f"{'（含参考图）' if 'reference_url' in payload else ''}")
         dao.update_shot(conn, f"{pid}-s{idx:02d}", status="imaged")
     dao.update_project(conn, pid, status="imaged")
     conn.close()
-    return {"pid": pid, "made": made, "skipped": skipped, "cost": cost}
+    return {"pid": pid, "made": made, "skipped": hits, "cost": cost}
+
+
+def _data_url(img: Path) -> str:
+    import base64
+    b64 = base64.b64encode(img.read_bytes()).decode()
+    return f"data:image/png;base64,{b64}"
 
 
 def regenerate_images(pid: str, feedback_map: dict[int, str]) -> dict:
@@ -173,8 +180,8 @@ def align_audio(pid: str) -> dict:
         text, audio = s["narration"], audio_dir / f"shot_{idx:02d}.mp3"
 
         for attempt in range(3):  # 原始 + 至多 2 次改写
-            if attempt > 0 or not audio.exists():
-                gw.call("tts", {"text": text, "out_path": audio}, project_id=pid)
+            # P3 起每次过网关缓存：文本未变 → cache_hit 零成本；改写后新文本 → 真实合成
+            gw.call("tts", {"text": text, "out_path": str(audio)}, project_id=pid)
             actual = ffmpeg.probe_duration(audio)
             if lo <= actual <= hi:
                 align = "ok"

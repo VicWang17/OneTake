@@ -2,11 +2,18 @@
 
 两条铁律的承载点之一：管线节点所有外部模型调用必须经 call()，
 不得直接 import 厂商 SDK。本层负责：日预算熔断、计费日志（generations 表）、
-用量→成本换算（pricing.py 为单价唯一事实源）。
+用量→成本换算（pricing.py 为单价唯一事实源）、幂等缓存（P3）。
+
+幂等缓存（3.1）：idem_key = sha256(task_type + model + tier + 语义参数)。
+内容寻址——同内容必然同 key 直接复用；任何参数变化 → 新 key → 自动重新生成。
+命中双校验：记录存在 + 产物（文件/result_json）存在，互为验证。
+命中记 status=cache_hit、cost=0（命中率统计依据；不影响日预算）。
 """
 
+import hashlib
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -32,49 +39,94 @@ def _check_budget(conn) -> None:
         )
 
 
+def _idem_key(task_type: str, model: str, payload: dict, tier: str) -> str:
+    """内容指纹：语义参数参与哈希，out_path 等项目特定字段剔除（跨项目可命中）。"""
+    semantic = {k: v for k, v in payload.items() if k != "out_path"}
+    raw = json.dumps([task_type, model, tier, semantic],
+                     ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _try_cache(conn, idem_key: str, out_path: str | None, project_id: str | None):
+    """命中且产物完好则返回缓存结果；否则 None。命中留痕 cache_hit（cost=0）。"""
+    row = dao.find_generation_by_idem(conn, idem_key)
+    if not row:
+        return None
+    cached_file = row["file_path"]
+    if cached_file and Path(cached_file).exists():
+        # 双校验通过：文件在。目标位置不同则复制（跨项目命中）
+        if out_path and Path(cached_file) != Path(out_path):
+            Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(cached_file, out_path)
+        result = {"cached": True, "file_path": out_path or cached_file,
+                  "cost": 0.0, "model": row["model"], "latency_ms": 0}
+    elif row["result_json"]:
+        result = {"cached": True, "cost": 0.0, "model": row["model"],
+                  "latency_ms": 0}
+        result.update(json.loads(row["result_json"]))
+    else:
+        return None  # 记录在但产物丢失 → 视为未命中
+    dao.log_generation(conn, task_type=row["task_type"], model=row["model"],
+                       tier=row["tier"], prompt=row["prompt"], cost=0.0,
+                       status="cache_hit", project_id=project_id)
+    return result
+
+
 def call(task_type: str, payload: dict[str, Any], tier: str = "draft",
          project_id: str | None = None) -> dict[str, Any]:
     """统一入口。task_type: llm / image / video / tts。
 
     payload 按 task_type 约定：
-    - llm:   {system, user}                                     → {data, usage, cost}
-    - image: {prompt, size?}                                    → {url, usage, cost}
+    - llm:   {system, user} 或 {messages}                       → {data|text, usage, cost}
+    - image: {prompt, size?, reference_url?, out_path?}         → {url|file_path, cost}
     - video: {prompt, out_path, model?, seconds?, resolution?}  → {file_path, usage, cost}
     - tts:   {text, out_path}                                   → {file_path, cost}
-    所有返回 dict 都带 cost（人民币元）与 model。
+    所有返回 dict 都带 cost（人民币元）与 model；缓存命中带 cached=True。
     """
     conn = dao.get_conn()
     try:
+        model = payload.get("model") or {
+            "llm": adapters.DEEPSEEK_MODEL, "image": adapters.SEEDREAM_MODEL,
+            "video": adapters.SEEDANCE_MODEL, "tts": "edge-tts",
+        }.get(task_type, task_type)
+        idem_key = _idem_key(task_type, model, payload, tier)
+        cached = _try_cache(conn, idem_key, payload.get("out_path"), project_id)
+        if cached:
+            return cached
+
         _check_budget(conn)
         if task_type == "llm":
-            return _call_llm(conn, payload, tier, project_id)
+            return _call_llm(conn, payload, tier, project_id, idem_key)
         if task_type == "image":
-            return _call_image(conn, payload, tier, project_id)
+            return _call_image(conn, payload, tier, project_id, idem_key)
         if task_type == "video":
-            return _call_video(conn, payload, tier, project_id)
+            return _call_video(conn, payload, tier, project_id, idem_key)
         if task_type == "tts":
-            return _call_tts(conn, payload, tier, project_id)
+            return _call_tts(conn, payload, tier, project_id, idem_key)
         raise ValueError(f"未知 task_type: {task_type}")
     finally:
         conn.close()
 
 
-def _call_llm(conn, payload, tier, project_id):
+def _call_llm(conn, payload, tier, project_id, idem_key):
     model = adapters.DEEPSEEK_MODEL
     try:
         if "messages" in payload:  # 多轮模式（错误回灌等），返回原始文本
             text, usage, latency = adapters.deepseek_messages(payload["messages"])
             cost = pricing.calc_cost(model, usage)
             dao.log_generation(conn, task_type="llm", model=model, tier=tier,
-                               prompt=json.dumps(payload["messages"], ensure_ascii=False),
+                               prompt=json.dumps(payload["messages"], ensure_ascii=False)[:2000],
                                usage=usage, cost=cost, latency_ms=latency,
-                               project_id=project_id)
+                               project_id=project_id, idem_key=idem_key,
+                               result_json=json.dumps({"text": text}, ensure_ascii=False))
             return {"text": text, "usage": usage, "cost": cost, "model": model}
         data, usage, latency = adapters.deepseek_json(payload["system"], payload["user"])
         cost = pricing.calc_cost(model, usage)
         dao.log_generation(conn, task_type="llm", model=model, tier=tier,
                            prompt=payload["user"], usage=usage, cost=cost,
-                           latency_ms=latency, project_id=project_id)
+                           latency_ms=latency, project_id=project_id,
+                           idem_key=idem_key,
+                           result_json=json.dumps({"data": data}, ensure_ascii=False))
         return {"data": data, "usage": usage, "cost": cost, "model": model}
     except Exception as e:
         dao.log_generation(conn, task_type="llm", model=model, tier=tier,
@@ -83,7 +135,7 @@ def _call_llm(conn, payload, tier, project_id):
         raise
 
 
-def _call_image(conn, payload, tier, project_id):
+def _call_image(conn, payload, tier, project_id, idem_key):
     model = adapters.SEEDREAM_MODEL
     try:
         url, usage, latency = adapters.seedream_image(
@@ -95,7 +147,10 @@ def _call_image(conn, payload, tier, project_id):
                            params={"reference": bool(payload.get("reference_url"))},
                            usage=usage,
                            unit_price=pricing.PRICING[model].get("per_image", 0),
-                           cost=cost, latency_ms=latency, project_id=project_id)
+                           cost=cost, latency_ms=latency, project_id=project_id,
+                           idem_key=idem_key,
+                           file_path=payload.get("out_path"),
+                           result_json=json.dumps({"url": url}))
         return {"url": url, "usage": usage, "cost": cost, "model": model}
     except Exception as e:
         dao.log_generation(conn, task_type="image", model=model, tier=tier,
@@ -104,7 +159,7 @@ def _call_image(conn, payload, tier, project_id):
         raise
 
 
-def _call_video(conn, payload, tier, project_id):
+def _call_video(conn, payload, tier, project_id, idem_key):
     model = payload.get("model", adapters.SEEDANCE_MODEL)
     seconds = int(payload.get("seconds", 5))
     resolution = payload.get("resolution", "480p")
@@ -119,7 +174,8 @@ def _call_video(conn, payload, tier, project_id):
                            prompt=payload["prompt"], params={"seconds": seconds,
                                                              "resolution": resolution},
                            usage=info.get("usage"), cost=cost, latency_ms=latency,
-                           file_path=str(payload["out_path"]), project_id=project_id)
+                           file_path=str(payload["out_path"]), project_id=project_id,
+                           idem_key=idem_key)
         return {"file_path": str(payload["out_path"]), "usage": info.get("usage"),
                 "cost": cost, "model": model, "latency_ms": latency}
     except Exception as e:
@@ -129,14 +185,15 @@ def _call_video(conn, payload, tier, project_id):
         raise
 
 
-def _call_tts(conn, payload, tier, project_id):
+def _call_tts(conn, payload, tier, project_id, idem_key):
     model = "edge-tts"
     try:
         adapters.edge_tts_speak(payload["text"], Path(payload["out_path"]))
         cost = 0.0
         dao.log_generation(conn, task_type="tts", model=model, tier=tier,
                            prompt=payload["text"], cost=cost,
-                           file_path=str(payload["out_path"]), project_id=project_id)
+                           file_path=str(payload["out_path"]), project_id=project_id,
+                           idem_key=idem_key)
         return {"file_path": str(payload["out_path"]), "cost": cost, "model": model}
     except Exception as e:
         dao.log_generation(conn, task_type="tts", model=model, tier=tier,

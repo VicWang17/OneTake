@@ -186,10 +186,11 @@
 目标：从「脚本能跑」升级为「系统可信」。
 **原则：线性版保留为主路径，LangGraph 并行重构、回归验证后转正。**
 
-### 3.1 幂等缓存（先做，独立受益）
-- [ ] `idem_key = sha256(model + prompt + params + tier)`，命中直接返回文件路径
-- [ ] 文件存在性校验（记录在但文件被删不算命中）
-- [ ] 缓存命中率统计与展示
+### 3.1 幂等缓存（先做，独立受益）✅ 2026-08-07
+- [x] `idem_key = sha256(task_type + model + tier + 语义参数)`，收敛在网关 call()（剔除 out_path 实现跨项目命中；参考图改 base64 内容寻址保 key 稳定）
+- [x] 双校验（记录存在 + 产物文件/result_json 存在），命中复制产物到目标路径
+- [x] 命中率统计与展示（report：命中率 40% 首日数据——命中留痕带 project_id 归属）
+- [x] 真实验证：同 pid 重跑全链路命中、增量 ¥0、12 秒完成；两个路径 bug 修复（DEVLOG 018）
 
 ### 3.2 LangGraph 重构
 - [ ] `pipeline/state.py`：TypedDict 共享状态（project/shots/memory/skill）

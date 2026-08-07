@@ -37,7 +37,7 @@ def _gen_one(pid: str, shot: dict, img: Path, out: Path, model: str) -> dict:
         try:
             r = gw.call("video", {
                 "prompt": shot["motion_prompt"],
-                "out_path": out,
+                "out_path": str(out),
                 "model": model,
                 "seconds": 5, "resolution": "480p",
                 "first_frame_url": _data_url(img),
@@ -68,8 +68,6 @@ def batch_generate_videos(pid: str, only_shots: list[int] | None = None,
         if only_shots and idx not in only_shots:
             continue
         out = clips_dir / f"shot_{idx:02d}_src.mp4"
-        if out.exists():
-            continue
         img = pdir / "shots" / f"shot_{idx:02d}.png"
         if not img.exists():
             raise FileNotFoundError(f"缺分镜图: {img}（先跑 images --pid {pid}）")

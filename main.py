@@ -59,14 +59,20 @@ def report(
     typer.echo(f"== OneTake 成本报表（{title}） ==")
     typer.echo(f"{'环节':<8}{'模型':<34}{'次数':>4} {'成本(¥)':>10}")
     by_type: dict[tuple[str, str], list] = {}
+    hits = 0
     for r in rows:
+        if r["status"] == "cache_hit":
+            hits += 1
+            continue
         by_type.setdefault((r["task_type"], r["model"]), []).append(r)
     total = 0.0
     for (tt, model), rs in sorted(by_type.items()):
         cost = sum(float(r["cost"]) for r in rs)
         total += cost
         typer.echo(f"{tt:<8}{model:<34}{len(rs):>4} {cost:>10.4f}")
-    typer.echo(f"{'合计':<44}{len(rows):>4} {total:>10.4f}")
+    typer.echo(f"{'合计':<44}{len(rows) - hits:>4} {total:>10.4f}")
+    if rows:
+        typer.echo(f"缓存命中 {hits} 次 / 总调用 {len(rows)} 次，命中率 {hits / len(rows) * 100:.1f}%")
 
     spent = dao.today_spend(conn)
     typer.echo(f"\n今日已花费 ¥{spent:.2f} / 日熔断上限 ¥{gw_limit():.2f}")
