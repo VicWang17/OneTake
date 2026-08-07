@@ -28,9 +28,10 @@ def _download(url: str, out: Path) -> None:
     out.write_bytes(r.content)
 
 
-def create_outline(topic: str, feedback: str | None = None) -> dict:
+def create_outline(topic: str, feedback: str | None = None,
+                   pid: str | None = None) -> dict:
     """1.1 大纲生成：建项目 → LLM 大纲 → script.json + 风格入库。"""
-    pid = time.strftime("p%Y%m%d-%H%M%S")
+    pid = pid or time.strftime("p%Y%m%d-%H%M%S")
     pdir = PROJECTS_DIR / pid
     pdir.mkdir(parents=True, exist_ok=True)
 
@@ -64,7 +65,7 @@ def create_storyboard(topic: str | None = None, pid: str | None = None,
         script = json.loads(script_path.read_text(encoding="utf-8"))
         outline_data = script["outline"]
     else:
-        result = create_outline(topic, feedback=feedback)
+        result = create_outline(topic, feedback=feedback, pid=pid)
         pid, outline_data = result["pid"], result["outline"]
         script_path = PROJECTS_DIR / pid / "script.json"
         script = json.loads(script_path.read_text(encoding="utf-8"))

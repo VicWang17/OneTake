@@ -13,6 +13,7 @@ from db import dao
 from editing import edl as edl_mod
 from editing import ffmpeg
 from pipeline import endtoend, linear
+from pipeline import graph as graph_mod
 from pipeline import storyboard as storyboard_mod
 from pipeline import videos as videos_mod
 
@@ -27,11 +28,25 @@ def run(
     topic: str = typer.Option(None, "--topic", help="选题（P2 端到端管线）"),
     pid: str = typer.Option(None, "--pid", help="断点续跑已有项目"),
     auto: bool = typer.Option(False, "--auto", help="跳过两处人工确认，全自动"),
+    graph: bool = typer.Option(False, "--graph", help="P3 图版编排（LangGraph + checkpointer）"),
     video_shots: int = typer.Option(0, "--video-shots",
                                     help="P0 管线专用：前 N 个镜头用真实视频生成"),
 ):
     """一条命令出片：--topic 选题端到端（推荐）；--script 固定文案（P0 路径）；--pid 续跑。"""
     if topic or pid:
+        if graph:
+            result = graph_mod.run_graph(topic=topic, pid=pid, auto=auto,
+                                         on_interrupt=_cli_interrupt)
+            if result.get("aborted"):
+                typer.echo("已中止。")
+                return
+            if result.get("error"):
+                typer.echo(f"中断：{result['error']}")
+                raise typer.Exit(code=1)
+            typer.echo(f"\n完成（图版）：{result['draft']}\n"
+                       f"  时长 {result['duration']:.1f}s · "
+                       f"耗时 {result['minutes']:.1f} 分钟 · 成本 ¥{result['cost']:.2f}")
+            return
         result = endtoend.run_topic(topic, auto=auto, pid=pid)
         typer.echo(f"\n完成：{result['draft']}\n"
                    f"  时长 {result['duration']:.1f}s · 耗时 {result['minutes']:.1f} 分钟 · "
@@ -46,6 +61,52 @@ def run(
         )
         return
     raise typer.BadParameter("请提供 --topic、--pid 或 --script")
+
+
+def _cli_interrupt(payload: dict):
+    """图版人工确认的 CLI 交互（interrupt 的 resume 值生产者）。"""
+    import json as _json
+    import subprocess as _sp
+    import sys as _sys
+
+    pid = payload["pid"]
+    if payload["kind"] == "confirm_script":
+        s = _json.loads((ROOT / "projects" / pid / "script.json").read_text(encoding="utf-8"))
+        o = s["outline"]
+        typer.echo(f"\n===== [图] 脚本确认（{pid}）=====")
+        typer.echo(f"标题：{o['title']}（{o['target_duration']}s · {len(o['structure'])} 段）")
+        for sh in s["shots"]:
+            typer.echo(f"  [{sh['idx']:02d}] {sh['duration']}s {sh['purpose']}｜{sh['narration']}")
+        while True:
+            c = typer.prompt("确认？[y 继续 / n 中止 / r 带意见重生成]", default="y").strip().lower()
+            if c == "y":
+                return "y"
+            if c == "n":
+                return "n"
+            if c == "r":
+                return {"feedback": typer.prompt("修改意见")}
+    if payload["kind"] == "confirm_images":
+        shots_dir = ROOT / "projects" / pid / "shots"
+        typer.echo(f"\n===== [图] 分镜图确认（{shots_dir}）=====")
+        if _sys.platform == "darwin":
+            _sp.run(["open", str(shots_dir)], check=False)
+        while True:
+            c = typer.prompt("全部通过？[y / 镜头号如 3,7 / n 中止]", default="y").strip().lower()
+            if c == "y":
+                return "y"
+            if c == "n":
+                return "n"
+            try:
+                indices = [int(x) for x in c.split(",")]
+            except ValueError:
+                typer.echo("输入无效，请输入 y 或逗号分隔的镜头号")
+                continue
+            redo = {}
+            for idx in indices:
+                redo[idx] = typer.prompt(f"shot {idx:02d} 修改意见（留空原样重画）",
+                                         default="", show_default=False)
+            return {"redo": redo}
+    return "y"
 
 
 @app.command()
