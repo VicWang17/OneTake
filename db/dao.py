@@ -21,7 +21,7 @@ def get_conn(db_path: Path | str | None = None) -> sqlite3.Connection:
     """返回 SQLite 连接（row_factory=Row）。库不存在时按 schema.sql 自动建表。"""
     path = Path(db_path) if db_path else DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, check_same_thread=False)  # worker 线程池共享连接（to_thread 执行）
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     if not path.exists() or path.stat().st_size == 0 or not _has_tables(conn):

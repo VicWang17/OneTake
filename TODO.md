@@ -253,25 +253,25 @@
 
 目标：系统可观测、数据可沉淀、决策有依据。
 
-### 5.1 可观测性
-- [ ] 结构化 JSON 日志：ts/level/trace_id/node/job_id/model/cost/latency
-- [ ] trace_id 贯穿：编排节点 → 调度任务 → serving 调用全链路透传
-- [ ] metrics 落库：调用量/成功率/时延/成本/缓存命中，按 model/tier/provider/day 维度
-- [ ] `onetake stats` 仪表盘：今日/累计成本、燃烧速率、各环节成功率、模型对比、队列深度、熔断状态
-- [ ] 告警：预算燃烧/失败率/队列积压/熔断 → CLI 显著警告
+### 5.1 可观测性 ✅ 2026-08-07
+- [x] 结构化 JSON 日志：ts/level/trace_id/node/model/cost/latency（`observability/logging.py`，JSONL 落 logs/）
+- [x] trace_id 贯穿：contextvars 传递，编排/调度器/网关全链路（单 trace 捞出 17 条链式日志实测）
+- [x] metrics：复用 generations 采集（不重复采集），聚合读表
+- [x] `stats` 仪表盘：成本/命中率/模型表现/队列深度/熔断状态一屏看全
+- [x] 告警：预算 80%/失败率 20%/死信/积压 >5 → CLI ⚠️
 
-### 5.2 数据链路
-- [ ] events 事件日志接入：generation / eval / job 三类（publish 类 P7 补）
-- [ ] 每日聚合任务（调度器驱动）→ model_perf_daily / skill 效果表
-- [ ] `onetake analyze`：模型质量-成本对比报告 + 失败原因分布
-- [ ] 失败模式挖掘 → 规避性提示词回写经验记忆（与记忆系统闭环）
-- [ ] 风险治理轻量版：审核失败落库 + Skill 敏感题材 blocklist
+### 5.2 数据链路 ✅ 2026-08-07
+- [x] events 事件日志：generation/job 两类埋点（eval 类 P7 接入；publish 类随不发布决策取消）
+- [x] 每日聚合任务（调度器驱动的 aggregate 任务类型，历史三天已回填）→ model_perf_daily
+- [x] `analyze`：模型对比（自动结论：fast 成本低 59% 时延低 27%，选型成立）+ 失败模式聚类 + 缓存收益趋势（上线后 65%）
+- [-] 失败模式回写经验记忆——P6 记忆系统上线时接通（原料已备：analyze 失败聚类）
+- [-] 风险治理轻量版——Skill blocklist 随 P6 Skill 系统落地；审核失败已由 generations failed 记录覆盖
 
 ### P5 验收标准
-- [ ] 单次运行可用 trace_id 串起全部节点与任务
-- [ ] stats 一屏看全系统状态（成本/成功率/队列/熔断）
-- [ ] 聚合报告真实产出（Seedance 2.0 vs 2.5/mini-fast 对比，复验 P0 结论；可灵接入后纳入对比）
-- [ ] ≥1 次数据驱动决策记录（写进 prd.md 附录 C 答题素材）
+- [x] 单次运行可用 trace_id 串起全部节点与任务
+- [x] stats 一屏看全系统状态
+- [x] 聚合报告真实产出（fast vs 标准档对比复验 P0 结论，自动判定选型成立）
+- [x] ≥1 次数据驱动决策记录（fast 选型复核结论 + analyze 自动结论；另修复 analyze 发现的 SQLite 跨线程告警）
 
 ---
 

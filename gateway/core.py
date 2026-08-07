@@ -143,6 +143,12 @@ def call(task_type: str, payload: dict[str, Any], tier: str = "draft",
                  tier=tier, cached=False, cost=result.get("cost"),
                  latency_ms=result.get("latency_ms"),
                  degraded_from=result.get("degraded_from"))
+        from datapipe import events
+        events.emit("generation", task_type=task_type, model=result.get("model"),
+                    tier=tier, cost=result.get("cost"),
+                    latency_ms=result.get("latency_ms"),
+                    degraded_from=result.get("degraded_from"),
+                    project_id=project_id)
         return result
     finally:
         conn.close()

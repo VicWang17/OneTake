@@ -312,5 +312,12 @@ def stats():
     typer.echo(stats_mod.render(stats_mod.collect()))
 
 
+@app.command()
+def analyze():
+    """P5 数据分析：模型对比结论 / 失败模式分布 / 缓存收益趋势。"""
+    from observability import analyze as analyze_mod
+    typer.echo(analyze_mod.render(analyze_mod.collect()))
+
+
 if __name__ == "__main__":
     app()

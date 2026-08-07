@@ -60,12 +60,18 @@ async def _worker(worker_id: str, sems: dict[str, asyncio.Semaphore],
                 await asyncio.to_thread(handler, conn, job["id"], payload)
                 queue.complete(conn, job["id"])
                 olog.log("job_done", job_id=job["id"], type=job["type"])
+                from datapipe import events
+                events.emit("job", ref_id=job["id"], type=job["type"],
+                            outcome="succeeded", retry=job["retry_count"])
                 print(f"    [worker] job {job['id']} ({job['type']}) ✓")
             except Exception as e:  # noqa: BLE001
                 new_status = queue.fail(conn, job["id"], str(e)[:200])
                 olog.log("job_fail", level="ERROR", job_id=job["id"],
                          type=job["type"], new_status=new_status,
                          error=str(e)[:200])
+                from datapipe import events
+                events.emit("job", ref_id=job["id"], type=job["type"],
+                            outcome=new_status, error=str(e)[:200])
                 mark = "→ dead" if new_status == "dead" else f"→ 重试（第 {job['retry_count'] + 1} 次）"
                 print(f"    [worker] job {job['id']} ({job['type']}) ✗ {mark}: {str(e)[:60]}")
 
