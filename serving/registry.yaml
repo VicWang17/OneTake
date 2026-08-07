@@ -1,0 +1,115 @@
+# OneTake 模型注册表（P4）——模型治理的唯一事实源
+# 改本文件即上下架模型/调权重/换备胎，热更新无需重启（serving/registry.py 按 mtime 重载）
+# 价格同时为计费事实源（gateway/pricing.py 从此派生）。数据时点：2026-08-06 实测核实
+
+models:
+  # ---------- LLM ----------
+  - name: deepseek-v4-flash
+    provider: deepseek
+    capabilities: [llm]
+    tiers: [draft, final]
+    price: {kind: llm, input_per_mtok: 0.14, output_per_mtok: 0.28, currency: USD}
+    concurrency: 10
+    fallback: qwen3.7-flash
+    status: active
+    weight: 100          # LLM 主力 100%
+    note: 高峰时段（9-12/14-18 点）拟 2 倍计费
+
+  - name: qwen3.7-flash
+    provider: dashscope
+    capabilities: [llm]
+    tiers: [draft]
+    price: {kind: llm, input_per_mtok: 0.2, output_per_mtok: 0.8, currency: CNY}
+    concurrency: 10
+    fallback: null
+    status: active
+    weight: 0            # 纯备胎，不主动分流
+    note: 思考型模型，响应带 reasoning_content 需剥离；json 模式要求 prompt 含"json"字样
+
+  # ---------- 文生图 ----------
+  - name: doubao-seedream-4-0-250828
+    provider: ark
+    capabilities: [image]
+    tiers: [draft, final]
+    price: {kind: image, per_image: 0.20, currency: CNY}
+    concurrency: 5
+    fallback: doubao-seedream-4-5-251128
+    status: active
+    weight: 100
+
+  - name: doubao-seedream-4-5-251128
+    provider: ark
+    capabilities: [image]
+    tiers: [draft, final]
+    price: {kind: image, per_image: 0.25, currency: CNY}
+    concurrency: 5
+    fallback: null
+    status: active
+    weight: 0
+
+  - name: doubao-seedream-5-0-pro-260628
+    provider: ark
+    capabilities: [image]
+    tiers: [final]
+    price: {kind: image, per_image: 0.30, currency: CNY}
+    concurrency: 5
+    fallback: null
+    status: active
+    weight: 0
+    note: 质量升级档，P7 成片期评估
+
+  # ---------- 视频生成 ----------
+  - name: doubao-seedance-2-0-fast-260128
+    provider: ark
+    capabilities: [video]
+    tiers: [draft]
+    price: {kind: video, per_mtok: 14.0, currency: CNY}
+    concurrency: 5
+    fallback: doubao-seedance-2-0-260128
+    status: active
+    weight: 90           # 灰度演示：fast 90% / 2.0 标准 10%
+    note: 草稿档主力（2026-08-06 实测 ¥0.71/5s 480p）
+
+  - name: doubao-seedance-2-0-260128
+    provider: ark
+    capabilities: [video]
+    tiers: [draft, final]
+    price: {kind: video, per_mtok: 46.0, per_mtok_with_video_input: 28.0, currency: CNY}
+    concurrency: 5
+    fallback: doubao-seedance-2-0-fast-260128
+    status: active
+    weight: 10           # 灰度 10%
+    note: 实测 ¥2.31/5s 480p
+
+  - name: doubao-seedance-2-0-mini-260615
+    provider: ark
+    capabilities: [video]
+    tiers: [draft]
+    price: {kind: video, per_mtok: 14.0, currency: CNY, note: 占位待账单核实}
+    concurrency: 5
+    fallback: doubao-seedance-2-0-fast-260128
+    status: standby      # standby=注册但不可用（价格未核实）
+    weight: 0
+
+  - name: qwen3-vl-flash
+    provider: dashscope
+    capabilities: [vl]
+    tiers: [draft, final]
+    price: {kind: llm, input_per_mtok: 0.15, output_per_mtok: 1.5, currency: CNY}
+    concurrency: 5
+    fallback: null
+    status: active
+    weight: 100
+    note: VLM 质检（P7）；每模型 100 万 token 免费额度内计 0
+
+  # ---------- TTS ----------
+  - name: edge-tts
+    provider: local
+    capabilities: [tts]
+    tiers: [draft, final]
+    price: {kind: tts, per_char: 0.0, currency: CNY}
+    concurrency: 3
+    fallback: null       # 火山 TTS 待接入（¥1-5/万字符）
+    status: active
+    weight: 100
+    note: 非官方接口有瞬断，调用层已带 ≤3 次重试

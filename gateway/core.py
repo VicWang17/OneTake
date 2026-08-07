@@ -21,6 +21,7 @@ from dotenv import load_dotenv
 
 from db import dao
 from gateway import adapters, pricing
+from serving import registry
 
 load_dotenv()
 
@@ -31,14 +32,9 @@ class BudgetExceededError(RuntimeError):
     """当日累计成本达到 DAILY_BUDGET_LIMIT 时抛出（硬熔断）。"""
 
 
-# 失败降级链（3.4）：主模型抛异常 → 自动切备胎重试一次。
+# 失败降级链（3.4）：主模型抛异常 → 自动切备胎重试一次。备胎关系 P4 起由注册表驱动
+# （serving/registry.yaml 各模型的 fallback 字段，热更新可调）。
 # 降级结果不写 idem_key——不进缓存，下次运行仍优先试主力（防降级污染缓存）。
-FALLBACKS = {
-    "deepseek-v4-flash": "qwen3.7-flash",                    # LLM 跨供应商
-    "doubao-seedream-4-0-250828": "doubao-seedream-4-5-251128",  # 图跨版本
-    "doubao-seedance-2-0-fast-260128": "doubao-seedance-2-0-260128",  # 视频跨档互备
-    "doubao-seedance-2-0-260128": "doubao-seedance-2-0-fast-260128",
-}
 
 
 def _check_budget(conn) -> None:
@@ -142,7 +138,7 @@ def _call_llm(conn, payload, tier, project_id, idem_key):
         dao.log_generation(conn, task_type="llm", model=model, tier=tier,
                            prompt=payload.get("user") or json.dumps(payload.get("messages", []), ensure_ascii=False)[:500],
                            status="failed", error=str(e), project_id=project_id)
-        fb = FALLBACKS.get(model)
+        fb = registry.get_fallback(model)
         if not fb:
             raise
         # 降级：DeepSeek → Qwen（跨供应商；不写 idem_key，不污染缓存）
@@ -185,7 +181,7 @@ def _call_image(conn, payload, tier, project_id, idem_key):
         dao.log_generation(conn, task_type="image", model=model, tier=tier,
                            prompt=payload.get("prompt"), status="failed",
                            error=str(e), project_id=project_id)
-        fb = FALLBACKS.get(model)
+        fb = registry.get_fallback(model)
         if not fb:
             raise
         # 降级：Seedream 4.0 → 4.5（跨版本；不写 idem_key，不污染缓存）
@@ -228,7 +224,7 @@ def _call_video(conn, payload, tier, project_id, idem_key):
         dao.log_generation(conn, task_type="video", model=model, tier=tier,
                            prompt=payload.get("prompt"), status="failed",
                            error=str(e), project_id=project_id)
-        fb = FALLBACKS.get(model)
+        fb = registry.get_fallback(model)
         if not fb:
             raise
         # 降级：Seedance 跨档互备（不写 idem_key，不污染缓存）
