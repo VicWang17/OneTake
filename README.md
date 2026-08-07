@@ -14,9 +14,13 @@ uv sync
 # 2. 配置密钥
 cp .env.example .env            # 填入 ARK_API_KEY / DEEPSEEK_API_KEY / DASHSCOPE_API_KEY
 
+uv run uvicorn serving.app:app --port 8300 &   # P4 起：模型服务层（可选但推荐）
+
 # 3. 端到端：选题一句话 → 60s 成片（约 8 分钟，~¥8）
+export ONETAKE_SERVING_URL=http://127.0.0.1:8300  # 走 serving 服务（不设则本地直连）
 uv run python main.py run --topic "为什么人睡觉会做梦"
 uv run python main.py run --topic "..." --auto     # 跳过人工确认，全自动
+uv run python main.py run --topic "..." --graph    # LangGraph 图版（checkpointer 断点恢复）
 uv run python main.py run --pid <pid>              # 断点续跑（增量扣费，零重复）
 
 # 4. 成本报表
