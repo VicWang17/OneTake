@@ -192,12 +192,12 @@
 - [x] 命中率统计与展示（report：命中率 40% 首日数据——命中留痕带 project_id 归属）
 - [x] 真实验证：同 pid 重跑全链路命中、增量 ¥0、12 秒完成；两个路径 bug 修复（DEVLOG 018）
 
-### 3.2 LangGraph 重构
-- [ ] `pipeline/state.py`：TypedDict 共享状态（project/shots/memory/skill）
-- [ ] `pipeline/graph.py`：StateGraph，节点 = 现有能力函数
-- [ ] SQLite checkpointer：进程 kill 后断点恢复
-- [ ] 两处 interrupt 人工节点（脚本确认、分镜确认）移植进图
-- [ ] 回归验证：同一选题，图版与线性版产物一致
+### 3.2 LangGraph 重构 ✅ 2026-08-07
+- [x] `pipeline/state.py`：TypedDict 共享状态（total=False，节点只写自己的键）
+- [x] `pipeline/graph.py`：StateGraph 七节点链，节点 = 现有能力函数薄包装（能力层零改动）
+- [x] SQLite checkpointer：kill -9 恢复演练通过（step 2 崩溃 → 快照恢复 → 完成；恢复粒度=节点，节点内靠缓存兜底）
+- [x] 两处 interrupt 人工节点进图（CLI 交互经 on_interrupt 回调；--auto 直通）
+- [x] 回归验证：同项目图版与线性版产物一致（59.3s 同参数同成本）；语义发现：完成态 thread 再 invoke 为空操作（DEVLOG 019）
 
 ### 3.3 成本报表
 - [ ] `report` 完整版：按项目/环节/档位输出明细与单条成本
