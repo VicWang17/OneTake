@@ -28,6 +28,8 @@ PRICING = {
     },
     # 文生图：Seedream 4.0 按张计费
     "doubao-seedream-4-0-250828": {"kind": "image", "per_image": 0.20, "currency": "CNY"},
+    "doubao-seedream-4-5-251128": {"kind": "image", "per_image": 0.25, "currency": "CNY",
+                                   "note": "4.0 的降级备胎（跨版本）"},
     "doubao-seedream-5-0-pro-260628": {"kind": "image", "per_image": 0.30, "currency": "CNY"},
     # 视频：Seedance 按 token 计费。实测发现：同分辨率时长下各档位 token 数相同
     # （5s 480p 均为 50638），成本差异完全来自每 token 单价（2026-08-06 实测）

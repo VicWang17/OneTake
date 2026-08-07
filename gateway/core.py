@@ -31,6 +31,16 @@ class BudgetExceededError(RuntimeError):
     """当日累计成本达到 DAILY_BUDGET_LIMIT 时抛出（硬熔断）。"""
 
 
+# 失败降级链（3.4）：主模型抛异常 → 自动切备胎重试一次。
+# 降级结果不写 idem_key——不进缓存，下次运行仍优先试主力（防降级污染缓存）。
+FALLBACKS = {
+    "deepseek-v4-flash": "qwen3.7-flash",                    # LLM 跨供应商
+    "doubao-seedream-4-0-250828": "doubao-seedream-4-5-251128",  # 图跨版本
+    "doubao-seedance-2-0-fast-260128": "doubao-seedance-2-0-260128",  # 视频跨档互备
+    "doubao-seedance-2-0-260128": "doubao-seedance-2-0-fast-260128",
+}
+
+
 def _check_budget(conn) -> None:
     spent = dao.today_spend(conn)
     if spent >= DAILY_BUDGET_LIMIT:
@@ -132,7 +142,26 @@ def _call_llm(conn, payload, tier, project_id, idem_key):
         dao.log_generation(conn, task_type="llm", model=model, tier=tier,
                            prompt=payload.get("user") or json.dumps(payload.get("messages", []), ensure_ascii=False)[:500],
                            status="failed", error=str(e), project_id=project_id)
-        raise
+        fb = FALLBACKS.get(model)
+        if not fb:
+            raise
+        # 降级：DeepSeek → Qwen（跨供应商；不写 idem_key，不污染缓存）
+        msgs = payload.get("messages") or [
+            {"role": "system", "content": payload["system"]},
+            {"role": "user", "content": payload["user"]},
+        ]
+        text, usage, latency = adapters.qwen_messages(msgs)
+        cost = pricing.calc_cost(fb, usage)
+        dao.log_generation(conn, task_type="llm", model=fb, tier=tier,
+                           prompt=json.dumps(msgs, ensure_ascii=False)[:2000],
+                           params={"degraded_from": model}, usage=usage, cost=cost,
+                           latency_ms=latency, project_id=project_id,
+                           result_json=json.dumps({"text": text}, ensure_ascii=False))
+        if "messages" in payload:
+            return {"text": text, "usage": usage, "cost": cost, "model": fb,
+                    "degraded_from": model}
+        return {"data": json.loads(text), "usage": usage, "cost": cost,
+                "model": fb, "degraded_from": model}
 
 
 def _call_image(conn, payload, tier, project_id, idem_key):
@@ -156,7 +185,24 @@ def _call_image(conn, payload, tier, project_id, idem_key):
         dao.log_generation(conn, task_type="image", model=model, tier=tier,
                            prompt=payload.get("prompt"), status="failed",
                            error=str(e), project_id=project_id)
-        raise
+        fb = FALLBACKS.get(model)
+        if not fb:
+            raise
+        # 降级：Seedream 4.0 → 4.5（跨版本；不写 idem_key，不污染缓存）
+        url, usage, latency = adapters.seedream_image(
+            payload["prompt"], payload.get("size", "1280x720"),
+            reference_url=payload.get("reference_url"), model=fb)
+        cost = pricing.calc_cost(fb, usage, n_images=1)
+        dao.log_generation(conn, task_type="image", model=fb, tier=tier,
+                           prompt=payload["prompt"],
+                           params={"degraded_from": model},
+                           usage=usage,
+                           unit_price=pricing.PRICING[fb].get("per_image", 0),
+                           cost=cost, latency_ms=latency, project_id=project_id,
+                           file_path=payload.get("out_path"),
+                           result_json=json.dumps({"url": url}))
+        return {"url": url, "usage": usage, "cost": cost, "model": fb,
+                "degraded_from": model}
 
 
 def _call_video(conn, payload, tier, project_id, idem_key):
@@ -182,7 +228,25 @@ def _call_video(conn, payload, tier, project_id, idem_key):
         dao.log_generation(conn, task_type="video", model=model, tier=tier,
                            prompt=payload.get("prompt"), status="failed",
                            error=str(e), project_id=project_id)
-        raise
+        fb = FALLBACKS.get(model)
+        if not fb:
+            raise
+        # 降级：Seedance 跨档互备（不写 idem_key，不污染缓存）
+        info, latency = adapters.seedance_video(
+            payload["prompt"], Path(payload["out_path"]), model=fb,
+            seconds=seconds, resolution=resolution,
+            first_frame_url=payload.get("first_frame_url"))
+        cost = pricing.calc_cost(fb, info.get("usage"),
+                                 seconds=seconds, resolution=resolution)
+        dao.log_generation(conn, task_type="video", model=fb, tier=tier,
+                           prompt=payload["prompt"],
+                           params={"seconds": seconds, "resolution": resolution,
+                                   "degraded_from": model},
+                           usage=info.get("usage"), cost=cost, latency_ms=latency,
+                           file_path=str(payload["out_path"]), project_id=project_id)
+        return {"file_path": str(payload["out_path"]), "usage": info.get("usage"),
+                "cost": cost, "model": fb, "latency_ms": latency,
+                "degraded_from": model}
 
 
 def _call_tts(conn, payload, tier, project_id, idem_key):

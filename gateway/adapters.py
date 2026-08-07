@@ -16,6 +16,35 @@ load_dotenv()
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_MODEL = "deepseek-v4-flash"
 
+# 百炼（LLM 跨供应商降级备胎；OpenAI 兼容协议）
+DASHSCOPE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+QWEN_MODEL = "qwen3.7-flash"
+
+
+def qwen_messages(messages: list[dict], max_retries: int = 3) -> tuple[str, dict, int]:
+    """百炼 Qwen 多轮调用（降级路径）。注意 qwen3.7-flash 是思考型模型，
+    响应带 reasoning_content，content 字段仍是最终答案，直接用即可。"""
+    from openai import OpenAI
+
+    client = OpenAI(api_key=os.environ["DASHSCOPE_API_KEY"],
+                    base_url=DASHSCOPE_BASE_URL)
+    last_err: Exception | None = None
+    for attempt in range(1, max_retries + 1):
+        t0 = time.time()
+        try:
+            resp = client.chat.completions.create(
+                model=QWEN_MODEL, messages=messages,
+                response_format={"type": "json_object"},
+            )
+            latency_ms = int((time.time() - t0) * 1000)
+            usage = resp.usage.model_dump() if resp.usage else {}
+            return resp.choices[0].message.content, usage, latency_ms
+        except Exception as e:
+            last_err = e
+            if attempt < max_retries:
+                time.sleep(2 * attempt)
+    raise RuntimeError(f"Qwen 调用失败（{max_retries} 次）: {last_err}")
+
 SEEDREAM_MODEL = "doubao-seedream-4-0-250828"
 SEEDANCE_MODEL = "doubao-seedance-2-0-260128"
 SEEDANCE_FAST_MODEL = "doubao-seedance-2-0-fast-260128"
@@ -85,10 +114,11 @@ def _ark_client():
 
 
 def seedream_image(prompt: str, size: str = "1280x720",
-                   reference_url: str | None = None) -> tuple[str, dict, int]:
+                   reference_url: str | None = None,
+                   model: str | None = None) -> tuple[str, dict, int]:
     """文生图。支持参考图（图像锚点，角色一致性手段）。返回 (image_url, usage, latency_ms)。"""
     t0 = time.time()
-    kwargs: dict = {"model": SEEDREAM_MODEL, "prompt": prompt,
+    kwargs: dict = {"model": model or SEEDREAM_MODEL, "prompt": prompt,
                     "size": size, "response_format": "url"}
     if reference_url:
         kwargs["image"] = reference_url
