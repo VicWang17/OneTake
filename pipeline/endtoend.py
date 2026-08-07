@@ -16,6 +16,7 @@ import typer
 from db import dao
 from editing import edl as edl_mod
 from editing import ffmpeg
+from observability import logging as olog
 from pipeline import storyboard as sb
 from pipeline import videos as videos_mod
 
@@ -88,6 +89,9 @@ def run_topic(topic: str | None = None, auto: bool = False,
         print(f"[{pid}] 1/6 大纲+分镜+锚点完成（{len(r['shots'])} 镜）")
         if not auto:
             _confirm_script(pid)
+    olog.set_trace(pid)
+    olog.set_node("endtoend")
+    olog.log("run_start", mode="resume" if pid else "new")
 
     r = sb.create_images(pid)
     print(f"[{pid}] 2/6 分镜图完成（新 {r['made']} 跳 {r['skipped']}，¥{r['cost']:.2f}）")

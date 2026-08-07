@@ -11,6 +11,7 @@ import uuid
 
 from db import dao
 from scheduler import queue
+from observability import logging as olog
 from serving import registry
 
 # 任务类型 → 处理器（在 handlers.py 注册）
@@ -49,14 +50,22 @@ async def _worker(worker_id: str, sems: dict[str, asyncio.Semaphore],
         sem = sems.setdefault(provider, asyncio.Semaphore(
             _concurrency_of(provider)))
         handler = _HANDLERS[job["type"]]
+        olog.set_trace(payload.get("pid") or job["id"])
+        olog.set_node(f"job:{job['type']}")
+        olog.log("job_start", job_id=job["id"], type=job["type"],
+                 retry=job["retry_count"])
         async with sem:
             try:
                 # 同步 SDK 放线程里跑，事件循环不被阻塞
                 await asyncio.to_thread(handler, conn, job["id"], payload)
                 queue.complete(conn, job["id"])
+                olog.log("job_done", job_id=job["id"], type=job["type"])
                 print(f"    [worker] job {job['id']} ({job['type']}) ✓")
             except Exception as e:  # noqa: BLE001
                 new_status = queue.fail(conn, job["id"], str(e)[:200])
+                olog.log("job_fail", level="ERROR", job_id=job["id"],
+                         type=job["type"], new_status=new_status,
+                         error=str(e)[:200])
                 mark = "→ dead" if new_status == "dead" else f"→ 重试（第 {job['retry_count'] + 1} 次）"
                 print(f"    [worker] job {job['id']} ({job['type']}) ✗ {mark}: {str(e)[:60]}")
 

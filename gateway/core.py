@@ -21,6 +21,7 @@ from dotenv import load_dotenv
 
 from db import dao
 from gateway import adapters, pricing
+from observability import logging as olog
 from serving import registry
 
 load_dotenv()
@@ -118,18 +119,31 @@ def call(task_type: str, payload: dict[str, Any], tier: str = "draft",
         idem_key = _idem_key(task_type, model, payload, tier)
         cached = _try_cache(conn, idem_key, payload.get("out_path"), project_id)
         if cached:
+            olog.log("model_call", task_type=task_type, model=model, tier=tier,
+                     cached=True, cost=0.0)
             return cached
 
         _check_budget(conn)
-        if task_type == "llm":
-            return _call_llm(conn, payload, tier, project_id, idem_key)
-        if task_type == "image":
-            return _call_image(conn, payload, tier, project_id, idem_key)
-        if task_type == "video":
-            return _call_video(conn, payload, tier, project_id, idem_key)
-        if task_type == "tts":
-            return _call_tts(conn, payload, tier, project_id, idem_key)
-        raise ValueError(f"未知 task_type: {task_type}")
+        try:
+            if task_type == "llm":
+                result = _call_llm(conn, payload, tier, project_id, idem_key)
+            elif task_type == "image":
+                result = _call_image(conn, payload, tier, project_id, idem_key)
+            elif task_type == "video":
+                result = _call_video(conn, payload, tier, project_id, idem_key)
+            elif task_type == "tts":
+                result = _call_tts(conn, payload, tier, project_id, idem_key)
+            else:
+                raise ValueError(f"未知 task_type: {task_type}")
+        except Exception as e:
+            olog.log("model_call", level="ERROR", task_type=task_type, model=model,
+                     tier=tier, error=str(e)[:200])
+            raise
+        olog.log("model_call", task_type=task_type, model=result.get("model"),
+                 tier=tier, cached=False, cost=result.get("cost"),
+                 latency_ms=result.get("latency_ms"),
+                 degraded_from=result.get("degraded_from"))
+        return result
     finally:
         conn.close()
 

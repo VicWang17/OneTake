@@ -18,6 +18,7 @@ from langgraph.types import Command, interrupt
 from db import dao
 from editing import edl as edl_mod
 from editing import ffmpeg
+from observability import logging as olog
 from pipeline import storyboard as sb
 from pipeline import videos as videos_mod
 from pipeline.state import PipelineState
@@ -146,6 +147,9 @@ def run_graph(topic: str | None = None, pid: str | None = None,
     graph = build_graph(saver)
 
     pid = pid or time.strftime("p%Y%m%d-%H%M%S")
+    olog.set_trace(pid)
+    olog.set_node("graph")
+    olog.log("run_start", mode="resume" if pid else "new", engine="graph")
     config = {"configurable": {"thread_id": pid}}
     has_checkpoint = saver.get_tuple(config) is not None
 
