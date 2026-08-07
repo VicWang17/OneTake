@@ -9,25 +9,29 @@ import json
 
 from gateway import core as gw
 
-CHARACTER_SYSTEM = """你是角色设计师。根据视频大纲和分镜，设计一个贯穿全片的视觉锚点，输出严格 JSON：
+CHARACTER_SYSTEM = """你是角色设计师。根据视频大纲和分镜，设计贯穿全片的视觉锚点，输出严格 JSON：
 {
-  "character_sheet": "一段 60-120 字的中文描述，包含：①主角色/吉祥物（如有）的固定外观——造型、配色、标志性配饰；②全片统一的视觉元素——画风、主色调、构图偏好"
+  "character_anchor": "主角色/吉祥物的固定外观（造型/配色/标志性配饰），60-100 字，只讲角色本身",
+  "style_anchor": "全片统一视觉风格（画风/主色调/构图/反复出现的物件意象），40-80 字，不含角色"
 }
 要求：
-1. 必须与大纲 style.visual 一致，把它具体化为可复用的固定描述；
-2. 角色设计要简单、几何化、适合扁平插画风复现（避免复杂发型/写实五官）；
-3. 若题材无人物（纯物件/风景科普），则设计一个"向导吉祥物"并统一视觉元素；
-4. 只输出 JSON。"""
+1. 两段严格分离：character_anchor 不含风格词，style_anchor 不含角色——因为角色只在部分镜头出场（分镜有 has_character 标记），风格则全片统一；
+2. 与大纲 style.visual 一致并具体化；角色设计简单、几何化、适合扁平插画风复现；
+3. 只输出 JSON。"""
 
 
-def generate_character_sheet(outline: dict, shots: list[dict], project_id: str) -> str:
-    """大纲 + 分镜 → character_sheet 文本（经网关计费）。空描述即抛错。"""
+def generate_character_sheet(outline: dict, shots: list[dict], project_id: str) -> dict:
+    """大纲 + 分镜 → 双段锚点（经网关计费）。空段即抛错。
+    返回 {"character_anchor": ..., "style_anchor": ...}。"""
     user = (f"视频大纲：\n{json.dumps(outline, ensure_ascii=False)}\n\n"
             f"分镜概要：\n" + "\n".join(
-                f"镜头{s['idx']}（{s['purpose']}）：{s['narration'][:20]}" for s in shots))
+                f"镜头{s['idx']}（{s['purpose']}，{'角色出场' if s.get('has_character') else '无角色'}）：{s['narration'][:20]}"
+                for s in shots))
     r = gw.call("llm", {"system": CHARACTER_SYSTEM, "user": user},
                 project_id=project_id)
-    sheet = (r["data"].get("character_sheet") or "").strip()
-    if not sheet:
-        raise ValueError("角色设定表为空")
-    return sheet
+    data = r["data"]
+    char = (data.get("character_anchor") or "").strip()
+    style = (data.get("style_anchor") or "").strip()
+    if not char or not style:
+        raise ValueError(f"锚点段落缺失: char={bool(char)} style={bool(style)}")
+    return {"character_anchor": char, "style_anchor": style}

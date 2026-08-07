@@ -219,17 +219,17 @@
 目标：模型调用走服务、异步负载走调度——从「工具」变「平台」。
 **本周全是本地工程，近零 API 成本；是岗位 B 叙事的地基，优先级高于 P5/P6。**
 
-### 4.1 模型注册表
-- [ ] 注册表 YAML Schema（name/provider/capability/tier/单价/免费额度/并发上限/fallback_to/状态）
-- [ ] 加载器 + 热更新（改 YAML 即上下架模型，演示录屏素材）
-- [ ] 已接入的 6 个模型全部录入注册表
+### 4.1 模型注册表 ✅ 2026-08-07
+- [x] 注册表 YAML Schema（name/provider/capability/tier/价格/并发/备胎/权重/状态），9+1 模型录入（mini 标 standby）
+- [x] 加载器 + mtime 热更新（改 YAML 即上下架/调权重）
+- [x] pricing.py 与 FALLBACKS 均从注册表派生（单一事实源，杜绝双写漂移）
 
-### 4.2 Serving 服务
-- [ ] FastAPI app：`POST /v1/chat/completions`、`/v1/images/generations`、`/v1/videos/generations`（异步任务式）、`GET /v1/models`、`GET /health`
-- [ ] 厂商适配器（deepseek/ark/kling/qwen）迁移到 serving 内部，网关四机制（路由/缓存/计费/降级）随迁
-- [ ] 灰度路由：按百分比分流（如 seedance:kling = 90:10）
-- [ ] provider 熔断：连续失败断开 + 半开探测恢复
-- [ ] 管线节点全部改为 HTTP 调 serving（回归：同一选题产物与 P3 一致）
+### 4.2 Serving 服务 ✅ 2026-08-07
+- [x] FastAPI app：/v1/chat/completions、/v1/images/generations、/v1/videos/generations、/v1/audio/speech、/v1/models、/health（视频为同步长连接，异步任务式留给调度器深化）
+- [x] 厂商适配器在 serving 内部（管线经 ONETAKE_SERVING_URL 走 HTTP，开关切换，零改动）
+- [x] 灰度路由：权重分流（fast:90/2.0:10，实测 1000 抽样 918:82；终验跑 2/8 真实分到标准档）
+- [-] provider 熔断（circuit breaker）：**推迟到 P5**（当前 FALLBACKS 降级链已覆盖主备切换，熔断器与可观测性告警联动做更顺）
+- [x] 管线 HTTP 化回归：修复 wire 归一化污染 idem_key 后，两条传输路径缓存语义一致（DEVLOG 021）
 
 ### 4.3 任务调度器 ✅ 2026-08-07
 - [x] jobs 表状态机：pending → running → succeeded/failed → dead（`scheduler/queue.py`，claim 条件更新防双领）
@@ -241,10 +241,11 @@
 - [x] CLI：`jobs list / stats / retry`（cancel 暂缓）；死信重放演练通过（零成本方案）
 
 ### P4 验收标准
-- [ ] kill worker 后恢复：无任务丢失、无重复扣费
-- [ ] 灰度演示：视频生成 10% 流量切 seedance 2.5（新版本灰度，正对"实验到上线"叙事），注册表热更新生效
-- [ ] 管线节点 100% 经 serving 调用（grep 确认 nodes/ 无厂商 SDK import）
-- [ ] 批量提交 3 条视频任务经调度器完成，含 ≥1 次失败重试成功
+- [x] kill worker 后恢复：无任务丢失、无重复扣费（sleep 任务零成本演练通过）
+- [x] 灰度演示：视频 10% 流量切标准档（fast:90/2.0:10），注册表热更新生效（2026-08-07 决策：用已开通的 2.0 而非 2.5，零新成本）
+- [x] 管线节点 100% 经网关/serving 调用（grep 确认 nodes/ pipeline/ 无厂商 SDK import，2026-08-07）
+- [x] 批量任务经调度器完成；失败重试与死信重放演练通过（演练 A/B/C）
+- [x] 角色锚点条件化（has_character + 双段锚点，dry run 四分支验证；未做真实生成验证，效果待 P7 出片观察）
 
 ---
 

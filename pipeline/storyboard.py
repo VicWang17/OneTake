@@ -76,15 +76,34 @@ def create_storyboard(topic: str | None = None, pid: str | None = None,
                         visual_prompt=s["visual_prompt"], narration=s["narration"],
                         status="storyboarded")
 
-    # 1.3 角色设定表：项目级文本锚点，1.4 出图时拼入每个 visual_prompt
-    sheet = character_node.generate_character_sheet(outline_data, shots, pid)
-    script["character_sheet"] = sheet
+    # 1.3 角色设定表：双段锚点（角色/风格分离，1.4 按 has_character 条件注入）
+    anchors = character_node.generate_character_sheet(outline_data, shots, pid)
+    script.update(anchors)
 
     script["shots"] = shots
     script_path.write_text(json.dumps(script, ensure_ascii=False, indent=2), encoding="utf-8")
     dao.update_project(conn, pid, status="storyboarded")
     conn.close()
-    return {"pid": pid, "shots": shots, "character_sheet": sheet}
+    return {"pid": pid, "shots": shots, **anchors}
+
+
+def build_image_prompt(script: dict, shot: dict) -> str:
+    """出图 prompt 构造（唯一注入点，DEVLOG 016 修复）。
+
+    规则：风格锚恒注入；角色锚仅在 shot.has_character=True 时注入。
+    老包兼容：无拆分锚点字段时，旧 character_sheet 整体恒注入（行为同修复前）。
+    """
+    style = script.get("style_anchor", "")
+    char = script.get("character_anchor", "")
+    parts = []
+    if style:
+        parts.append(style)
+    if char and shot.get("has_character"):
+        parts.append(char)
+    if not style and not char and script.get("character_sheet"):
+        parts.append(script["character_sheet"])
+    parts.append(shot["visual_prompt"])
+    return "，".join(parts)
 
 
 def create_images(pid: str) -> dict:
@@ -97,7 +116,6 @@ def create_images(pid: str) -> dict:
     pdir = PROJECTS_DIR / pid
     script_path = pdir / "script.json"
     script = json.loads(script_path.read_text(encoding="utf-8"))
-    sheet = script.get("character_sheet", "")
     shots_dir = pdir / "shots"
     shots_dir.mkdir(exist_ok=True)
 
@@ -107,7 +125,7 @@ def create_images(pid: str) -> dict:
     for s in script["shots"]:
         idx = int(s["idx"])
         img = shots_dir / f"shot_{idx:02d}.png"
-        prompt = f"{sheet}，{s['visual_prompt']}" if sheet else s["visual_prompt"]
+        prompt = build_image_prompt(script, s)
         payload: dict = {"prompt": prompt, "out_path": str(img)}
         if idx > 1 and first_img.exists():  # 参考图链：本地首图 base64（内容寻址稳定）
             payload["reference_url"] = _data_url(first_img)
@@ -136,14 +154,13 @@ def regenerate_images(pid: str, feedback_map: dict[int, str]) -> dict:
     """分镜图确认打回：按镜头号重画（可带修改意见），同时作废对应旧视频。"""
     pdir = PROJECTS_DIR / pid
     script = json.loads((pdir / "script.json").read_text(encoding="utf-8"))
-    sheet = script.get("character_sheet", "")
     shots = {int(s["idx"]): s for s in script["shots"]}
 
     conn = dao.get_conn()
     cost = 0.0
     for idx, fb in sorted(feedback_map.items()):
         s = shots[idx]
-        prompt = f"{sheet}，{s['visual_prompt']}"
+        prompt = build_image_prompt(script, s)
         if fb:
             prompt += f"。修改意见（请采纳）：{fb}"
         r = gw.call("image", {"prompt": prompt}, project_id=pid)

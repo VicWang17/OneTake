@@ -19,12 +19,14 @@ SHOTS_SYSTEM = """你是分镜师。根据用户给的视频大纲（含 style�
   "narration": "……",      # 台词，15-40 字，口语化，符合 style.tone
   "visual_prompt": "……",  # 画面描述，必须统一体现 style.visual
   "camera": "推",           # 运镜，只能是：推 / 拉 / 摇 / 固定
-  "purpose": "钩子"         # 叙事功能，只能是：钩子 / 铺垫 / 高潮 / 收尾
+  "purpose": "钩子",        # 叙事功能，只能是：钩子 / 铺垫 / 高潮 / 收尾
+  "has_character": true     # 主角/吉祥物是否在本镜出场：人物叙事镜头 true；纯场景/物件/概念图解镜头 false
 }]}
 要求：
 1. 全部 narration 按顺序拼接就是一篇完整解说稿，覆盖 structure 各段；
 2. 全部 duration 之和与 target_duration 的偏差 ≤20%；
-3. 只输出 JSON，不要任何其他文字。"""
+3. has_character 要克制：角色只在叙事需要的镜头出场，不要每镜都出（出多了观众会审美疲劳，场景也该有独立镜头）；
+4. 只输出 JSON，不要任何其他文字。"""
 
 CAMERAS = {"推", "拉", "摇", "固定"}
 PURPOSES = {"钩子", "铺垫", "高潮", "收尾"}
@@ -76,6 +78,8 @@ def validate(text: str, target_duration: int) -> tuple[dict | None, list[str]]:
             errors.append(f"{loc}.camera = {s.get('camera')!r}，必须是 推/拉/摇/固定 之一")
         if s.get("purpose") not in PURPOSES:
             errors.append(f"{loc}.purpose = {s.get('purpose')!r}，必须是 钩子/铺垫/高潮/收尾 之一")
+        if not isinstance(s.get("has_character"), bool):
+            errors.append(f"{loc}.has_character = {s.get('has_character')!r}，应为布尔值（角色是否出场）")
     if errors:
         return None, errors
 
