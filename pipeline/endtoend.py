@@ -77,16 +77,24 @@ def _confirm_images(pid: str) -> None:
 
 
 def run_topic(topic: str | None = None, auto: bool = False,
-              pid: str | None = None) -> dict:
-    """选题 → 成片全流程。pid 用于断点续跑（跳过已完成的阶段）。"""
+              pid: str | None = None, skill: str | None = None) -> dict:
+    """选题 → 成片全流程。pid 用于断点续跑（跳过已完成的阶段）。
+    skill：强制指定 Skill；未指定且新运行时由选择器按选题自动匹配。"""
     t0 = time.time()
 
     if pid:
         print(f"[{pid}] 续跑模式：复用已有大纲与分镜")
     else:
-        r = sb.create_storyboard(topic)
+        # P6：Skill 选择（--skill 指定优先，否则 LLM 选择器按选题匹配）
+        if not skill:
+            from skills import selector
+            choice = selector.choose_skill(topic)
+            skill = choice["skill"]
+            print(f"  Skill 选择：{skill or '无匹配（LLM 自决风格）'}——{choice['reason']}")
+        r = sb.create_storyboard(topic, skill_name=skill)
         pid = r["pid"]
-        print(f"[{pid}] 1/6 大纲+分镜+锚点完成（{len(r['shots'])} 镜）")
+        print(f"[{pid}] 1/6 大纲+分镜+锚点完成（{len(r['shots'])} 镜"
+              f"{'，Skill：' + skill if skill else ''}）")
         if not auto:
             _confirm_script(pid)
     olog.set_trace(pid)

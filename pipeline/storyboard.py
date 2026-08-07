@@ -6,6 +6,7 @@ storyboard 产出的分镜包（script.json + shots/*.png）就是 linear 的输
 
 import json
 import time
+import uuid
 from pathlib import Path
 
 import requests
@@ -16,6 +17,7 @@ from gateway import core as gw
 from nodes import character as character_node
 from nodes import outline as outline_node
 from nodes import storyboard as storyboard_node
+from skills import loader
 
 ROOT = Path(__file__).resolve().parent.parent
 PROJECTS_DIR = ROOT / "projects"
@@ -29,16 +31,28 @@ def _download(url: str, out: Path) -> None:
 
 
 def create_outline(topic: str, feedback: str | None = None,
-                   pid: str | None = None) -> dict:
-    """1.1 大纲生成：建项目 → LLM 大纲 → script.json + 风格入库。"""
-    pid = pid or time.strftime("p%Y%m%d-%H%M%S")
+                   pid: str | None = None, skill_name: str | None = None) -> dict:
+    """1.1 大纲生成：建项目 → LLM 大纲 → script.json + 风格入库。
+    skill_name 指定 Skill（P6）；None 时由调用方决定是否走选择器。"""
+    pid = pid or time.strftime("p%Y%m%d-%H%M%S") + f"-{uuid.uuid4().hex[:4]}"
     pdir = PROJECTS_DIR / pid
     pdir.mkdir(parents=True, exist_ok=True)
 
-    conn = dao.get_conn()
-    dao.create_project(conn, topic=topic, pid=pid)
+    skill = loader.get_skill(skill_name) if skill_name else None
 
-    data = outline_node.generate_outline(topic, pid, feedback=feedback)
+    conn = dao.get_conn()
+    dao.create_project(conn, topic=topic, pid=pid,
+                       skill_id=skill["id"] if skill else None)
+
+    data = outline_node.generate_outline(topic, pid, feedback=feedback, skill=skill)
+    (pdir / "script.json").write_text(
+        json.dumps({"topic": topic, "outline": data,
+                    "skill": skill_name}, ensure_ascii=False, indent=2),
+        encoding="utf-8")
+    dao.update_project(conn, pid, style_json=json.dumps(data["style"], ensure_ascii=False),
+                       status="outlined")
+    conn.close()
+    return {"pid": pid, "outline": data}
     (pdir / "script.json").write_text(
         json.dumps({"topic": topic, "outline": data}, ensure_ascii=False, indent=2),
         encoding="utf-8")
@@ -49,9 +63,11 @@ def create_outline(topic: str, feedback: str | None = None,
 
 
 def create_storyboard(topic: str | None = None, pid: str | None = None,
-                      feedback: str | None = None) -> dict:
+                      feedback: str | None = None,
+                      skill_name: str | None = None) -> dict:
     """1.2 分镜表：读大纲（已有 pid 或现场生成）→ LLM 分镜表（校验回灌）→ 落盘 + 入库。
-    pid + feedback：脚本确认打回——删除旧分镜，带意见全量重生成（大纲/分镜/锚点）。"""
+    pid + feedback：脚本确认打回——删除旧分镜，带意见全量重生成（大纲/分镜/锚点）。
+    skill_name：P6 指定 Skill（None 时由端到端编排层先走选择器）。"""
     conn = dao.get_conn()
     if pid and feedback:
         script_path = PROJECTS_DIR / pid / "script.json"
@@ -65,7 +81,8 @@ def create_storyboard(topic: str | None = None, pid: str | None = None,
         script = json.loads(script_path.read_text(encoding="utf-8"))
         outline_data = script["outline"]
     else:
-        result = create_outline(topic, feedback=feedback, pid=pid)
+        result = create_outline(topic, feedback=feedback, pid=pid,
+                                skill_name=skill_name)
         pid, outline_data = result["pid"], result["outline"]
         script_path = PROJECTS_DIR / pid / "script.json"
         script = json.loads(script_path.read_text(encoding="utf-8"))

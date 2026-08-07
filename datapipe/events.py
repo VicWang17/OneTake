@@ -17,8 +17,8 @@ def emit(kind: str, ref_id: str | None = None, **data) -> None:
     conn.execute(
         "INSERT INTO events (id, trace_id, kind, ref_id, data_json)"
         " VALUES (?, ?, ?, ?, ?)",
-        (uuid.uuid4().hex[:12], olog.trace_id_var.get(), kind, ref_id,
-         json.dumps(data, ensure_ascii=False)))
+        (uuid.uuid4().hex[:12], olog.trace_id_var.get() or "standalone",
+         kind, ref_id, json.dumps(data, ensure_ascii=False)))
     conn.commit()
     conn.close()
 

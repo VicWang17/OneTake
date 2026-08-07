@@ -51,7 +51,17 @@ def build_edl(pid: str) -> dict:
                           "text": s["narration"]})
         t += dur
 
-    bgm = next(iter(sorted(BGM_DIR.glob("*.mp3"))), None) if BGM_DIR.exists() else None
+    # BGM 选曲：Skill 指定（bgm.pick 序号）优先，否则目录第一首
+    bgm = None
+    bgm_files = sorted(BGM_DIR.glob("*.mp3")) if BGM_DIR.exists() else []
+    if bgm_files:
+        pick = 0
+        if script.get("skill"):
+            from skills import loader
+            sk = loader.get_skill(script["skill"])
+            if sk:
+                pick = sk["data"].get("bgm", {}).get("pick", 0)
+        bgm = bgm_files[min(pick, len(bgm_files) - 1)]
     edl = {
         "pid": pid, "fps": ffmpeg.FPS, "width": ffmpeg.WIDTH, "height": ffmpeg.HEIGHT,
         "duration": round(t, 3),

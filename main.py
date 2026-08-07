@@ -29,6 +29,7 @@ def run(
     pid: str = typer.Option(None, "--pid", help="断点续跑已有项目"),
     auto: bool = typer.Option(False, "--auto", help="跳过两处人工确认，全自动"),
     graph: bool = typer.Option(False, "--graph", help="P3 图版编排（LangGraph + checkpointer）"),
+    skill: str = typer.Option(None, "--skill", help="强制指定 Skill（默认 LLM 选择器自动匹配）"),
     video_shots: int = typer.Option(0, "--video-shots",
                                     help="P0 管线专用：前 N 个镜头用真实视频生成"),
 ):
@@ -47,7 +48,7 @@ def run(
                        f"  时长 {result['duration']:.1f}s · "
                        f"耗时 {result['minutes']:.1f} 分钟 · 成本 ¥{result['cost']:.2f}")
             return
-        result = endtoend.run_topic(topic, auto=auto, pid=pid)
+        result = endtoend.run_topic(topic, auto=auto, pid=pid, skill=skill)
         typer.echo(f"\n完成：{result['draft']}\n"
                    f"  时长 {result['duration']:.1f}s · 耗时 {result['minutes']:.1f} 分钟 · "
                    f"成本 ¥{result['cost']:.2f}")
