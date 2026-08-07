@@ -277,5 +277,33 @@ def render(pid: str = typer.Option(..., "--pid", help="项目 ID")):
                f"BGM {'有（闪避）' if edl['tracks'].get('bgm') else '无'}")
 
 
+@app.command()
+def jobs(
+    action: str = typer.Argument("list", help="list / stats / retry <job_id>"),
+    job_id: str | None = typer.Argument(None),
+):
+    """P4 任务调度器运维：jobs list [status] / jobs stats / jobs retry <id>（死信重放）。"""
+    from scheduler import queue as q
+    conn = dao.get_conn()
+    if action == "stats":
+        s = q.stats(conn)
+        typer.echo(f"任务统计：{s}")
+        total = sum(s.values())
+        done = s.get("succeeded", 0)
+        if total:
+            typer.echo(f"成功率（含重试）：{done / total * 100:.1f}%")
+    elif action == "retry":
+        if not job_id:
+            raise typer.BadParameter("retry 需要 job_id")
+        typer.echo("重放成功" if q.retry_job(conn, job_id) else "未找到 dead 状态的任务")
+    else:
+        rows = q.list_jobs(conn, status=job_id)  # job_id 位置复用为 status 过滤
+        typer.echo(f"{'id':<14}{'type':<12}{'status':<10}{'retry':>5}  created_at")
+        for j in rows[-20:]:
+            typer.echo(f"{j['id']:<14}{j['type']:<12}{j['status']:<10}"
+                       f"{j['retry_count']:>5}  {j['created_at']}")
+    conn.close()
+
+
 if __name__ == "__main__":
     app()

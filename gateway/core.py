@@ -45,14 +45,21 @@ def _check_budget(conn) -> None:
         )
 
 
-_TRANSPORT_KEYS = {"out_path", "tier", "model"}  # 不参与语义哈希：out_path/tier 为传输字段，model 单独作为 key 组成部分
+_TRANSPORT_KEYS = {"out_path", "tier", "model", "resume_task_id"}  # 不参与语义哈希：前三个为传输/路由字段（model 单独成 key 维），resume_task_id 为恢复状态
 
 
 def _idem_key(task_type: str, model: str, payload: dict, tier: str) -> str:
-    """内容指纹：语义参数参与哈希，传输字段（out_path/tier）剔除——
-    保证 HTTP 传输与本地直连产生相同 key（4.2 的关键不变量）。"""
-    semantic = {k: v for k, v in payload.items()
-                if k not in _TRANSPORT_KEYS and v is not None}
+    """内容指纹：语义参数参与哈希，传输字段（out_path/tier/model）与
+    不可序列化值（如 on_task_created 回调）剔除——保证指纹稳定可算。"""
+    semantic = {}
+    for k, v in payload.items():
+        if k in _TRANSPORT_KEYS or v is None:
+            continue
+        try:
+            json.dumps(v)
+            semantic[k] = v
+        except TypeError:
+            continue  # 回调等不可序列化对象不参与指纹
     raw = json.dumps([task_type, model, tier, semantic],
                      ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(raw.encode()).hexdigest()
@@ -222,7 +229,9 @@ def _call_video(conn, payload, tier, project_id, idem_key):
         info, latency = adapters.seedance_video(
             payload["prompt"], Path(payload["out_path"]), model=model,
             seconds=seconds, resolution=resolution,
-            first_frame_url=payload.get("first_frame_url"))
+            first_frame_url=payload.get("first_frame_url"),
+            resume_task_id=payload.get("resume_task_id"),
+            on_task_created=payload.get("on_task_created"))
         cost = pricing.calc_cost(model, info.get("usage"),
                                  seconds=seconds, resolution=resolution)
         dao.log_generation(conn, task_type="video", model=model, tier=tier,

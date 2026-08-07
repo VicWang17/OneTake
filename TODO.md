@@ -231,14 +231,14 @@
 - [ ] provider 熔断：连续失败断开 + 半开探测恢复
 - [ ] 管线节点全部改为 HTTP 调 serving（回归：同一选题产物与 P3 一致）
 
-### 4.3 任务调度器
-- [ ] jobs 表状态机：pending → running → succeeded/failed → dead
-- [ ] asyncio worker 池 + 按 provider 并发限流（读注册表配置）
-- [ ] 指数退避 + jitter 重试 ≤3 次，超限进死信
-- [ ] 优先级：交互 > 批量，final > draft
-- [ ] worker 崩溃恢复：running 回滚 pending；轮询型任务凭 task_id 续查不重复提交
-- [ ] 视频生成任务从 P2 简易队列迁移到调度器
-- [ ] CLI：`jobs list / stats / retry / cancel`
+### 4.3 任务调度器 ✅ 2026-08-07
+- [x] jobs 表状态机：pending → running → succeeded/failed → dead（`scheduler/queue.py`，claim 条件更新防双领）
+- [x] asyncio worker 池 + 按 provider 并发限流（读注册表 concurrency；同步 SDK 走 to_thread）
+- [x] 指数退避重试 ≤3 次，超限进死信（修复：stop_when_empty 遇退避中任务误退出的边界 bug，DEVLOG 021b）
+- [-] 优先级字段已有（priority 数值，claim 按其排序）；交互/批量分级策略暂缓（当前单一负载类型）
+- [x] worker 崩溃恢复：recover_orphans 回滚 running→pending（kill -9 演练通过）；轮询型任务凭 task_id 续查不重复提交（on_task_created 回写 payload）
+- [x] 视频生成任务迁入调度器（`pipeline/videos.py` 生产者-消费者分离）
+- [x] CLI：`jobs list / stats / retry`（cancel 暂缓）；死信重放演练通过（零成本方案）
 
 ### P4 验收标准
 - [ ] kill worker 后恢复：无任务丢失、无重复扣费

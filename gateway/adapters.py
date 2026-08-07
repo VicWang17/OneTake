@@ -132,18 +132,30 @@ def seedream_image(prompt: str, size: str = "1280x720",
 def seedance_video(prompt: str, out_path: Path, *, model: str = SEEDANCE_MODEL,
                    seconds: int = 5, resolution: str = "480p",
                    poll_interval: int = 5, timeout: int = 600,
-                   first_frame_url: str | None = None) -> tuple[dict, int]:
-    """视频生成全流程：创建任务 → 轮询 → 下载。返回 (task_info含usage, latency_ms)。"""
-    ark = _ark_client()
-    # 方舟视频生成 prompt 支持内联参数：--rs 分辨率 --dur 秒
-    full_prompt = f"{prompt} --rs {resolution} --dur {seconds}"
-    kwargs: dict = {"model": model, "content": [{"type": "text", "text": full_prompt}]}
-    if first_frame_url:
-        kwargs["content"].append({"type": "image_url", "image_url": {"url": first_frame_url}})
+                   first_frame_url: str | None = None,
+                   resume_task_id: str | None = None,
+                   on_task_created=None) -> tuple[dict, int]:
+    """视频生成全流程：创建任务 → 轮询 → 下载。返回 (task_info含usage, latency_ms)。
 
+    崩溃恢复（P4 调度器）：resume_task_id 存在则跳过创建直接续查；
+    on_task_created 回调在任务创建后立即拿到 task_id（用于持久化，崩溃不丢单）。
+    """
+    ark = _ark_client()
     t0 = time.time()
-    task = ark.content_generation.tasks.create(**kwargs)
-    task_id = task.id
+    if resume_task_id:
+        task_id = resume_task_id
+    else:
+        full_prompt = f"{prompt} --rs {resolution} --dur {seconds}"
+        kwargs: dict = {"model": model,
+                        "content": [{"type": "text", "text": full_prompt}]}
+        if first_frame_url:
+            kwargs["content"].append({"type": "image_url",
+                                      "image_url": {"url": first_frame_url}})
+        task = ark.content_generation.tasks.create(**kwargs)
+        task_id = task.id
+        if on_task_created:
+            on_task_created(task_id)
+
     while True:
         if time.time() - t0 > timeout:
             raise TimeoutError(f"Seedance 任务 {task_id} 超时（{timeout}s）")
