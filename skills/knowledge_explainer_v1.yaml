@@ -1,0 +1,17 @@
+# Skill 包：知识科普解说
+# 适用：科普/冷知识类选题的 60-90s 短视频（S1 场景主力）
+name: 知识科普解说
+version: 1.0.0
+match:
+  genres: [科普, 知识, 冷知识, 原理]
+  duration: [50, 90]
+structure: [钩子提问, 概念拆解, 类比举例, 反转总结]
+style:
+  tone: 快节奏、口语化、每 15 秒一个信息点，多用"你"拉近距离
+  visual: 扁平插画风、高饱和配色、构图简洁、避免人物大场景
+  voice: "zh-CN-YunxiNeural, rate: +10%"
+bgm:
+  pick: 0          # assets/bgm/ 目录下第 1 首（轻快电子）
+  volume: 0.15
+hooks:
+  after_script: [check_info_density]   # 后处理钩子（P6 校验不执行）

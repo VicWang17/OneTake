@@ -1,0 +1,17 @@
+# Skill 包：影视片段解说
+# 适用：电影/剧集解说类选题，风格与知识科普形成鲜明对比（验收"肉眼可辨"用）
+name: 影视片段解说
+version: 1.0.0
+match:
+  genres: [影视, 电影, 解说, 剧情]
+  duration: [50, 90]
+structure: [悬念开场, 剧情速览, 细节分析, 观点输出]
+style:
+  tone: 娓娓道来、节奏偏慢、观点先行、适当留白
+  visual: 暗色调电影感、光影对比强、物件与场景特写、无真人面孔
+  voice: "zh-CN-YunxiNeural, rate: -5%"
+bgm:
+  pick: 1          # 第 2 首（氛围感）
+  volume: 0.10     # 比科普更弱存在感
+hooks:
+  after_script: []

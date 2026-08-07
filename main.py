@@ -319,5 +319,19 @@ def analyze():
     typer.echo(analyze_mod.render(analyze_mod.collect()))
 
 
+@app.command()
+def skills():
+    """P6 Skill 技能库：扫描注册 skills/*.yaml 并列出清单。"""
+    from skills import loader
+    for r in loader.register_all():
+        typer.echo(f"  {'✅' if r['ok'] else '❌'} {r['file']}"
+                   + (f" → {r['name']} v{r['version']}" if r["ok"] else f" 错误: {r['errors']}"))
+    typer.echo("\n已注册 Skill：")
+    for s in loader.list_skills():
+        d = s["data"]
+        typer.echo(f"  {s['name']} v{s['version']} · 结构 {'→'.join(d['structure'])}"
+                   f" · 风格: {d['style']['visual'][:20]}…")
+
+
 if __name__ == "__main__":
     app()
