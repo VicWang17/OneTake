@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "edge-tts>=7.2.8",
+    "fastapi>=0.141.1",
     "langgraph>=1.2.10",
     "langgraph-checkpoint-sqlite>=3.1.1",
     "openai>=2.53.0",
@@ -11,6 +12,7 @@ dependencies = [
     "pyyaml>=6.0.3",
     "requests>=2.34.2",
     "typer>=0.27.1",
+    "uvicorn>=0.52.1",
     "volcengine-python-sdk[ark]>=5.0.43",
 ]
 

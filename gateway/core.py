@@ -45,9 +45,14 @@ def _check_budget(conn) -> None:
         )
 
 
+_TRANSPORT_KEYS = {"out_path", "tier", "model"}  # 不参与语义哈希：out_path/tier 为传输字段，model 单独作为 key 组成部分
+
+
 def _idem_key(task_type: str, model: str, payload: dict, tier: str) -> str:
-    """内容指纹：语义参数参与哈希，out_path 等项目特定字段剔除（跨项目可命中）。"""
-    semantic = {k: v for k, v in payload.items() if k != "out_path"}
+    """内容指纹：语义参数参与哈希，传输字段（out_path/tier）剔除——
+    保证 HTTP 传输与本地直连产生相同 key（4.2 的关键不变量）。"""
+    semantic = {k: v for k, v in payload.items()
+                if k not in _TRANSPORT_KEYS and v is not None}
     raw = json.dumps([task_type, model, tier, semantic],
                      ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(raw.encode()).hexdigest()
@@ -88,7 +93,15 @@ def call(task_type: str, payload: dict[str, Any], tier: str = "draft",
     - video: {prompt, out_path, model?, seconds?, resolution?}  → {file_path, usage, cost}
     - tts:   {text, out_path}                                   → {file_path, cost}
     所有返回 dict 都带 cost（人民币元）与 model；缓存命中带 cached=True。
+
+    P4 起：设 ONETAKE_SERVING_URL 则经 serving HTTP 服务调用（传输切换，
+    语义不变）；未设置走本地直连（默认，向后兼容）。
     """
+    serving_url = os.environ.get("ONETAKE_SERVING_URL")
+    if serving_url:
+        from gateway import client
+        return client.call(task_type, payload, tier, serving_url)
+
     conn = dao.get_conn()
     try:
         model = payload.get("model") or {
