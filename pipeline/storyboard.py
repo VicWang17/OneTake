@@ -40,11 +40,16 @@ def create_outline(topic: str, feedback: str | None = None,
 
     skill = loader.get_skill(skill_name) if skill_name else None
 
+    # P6 记忆注入：选题相关 Top-K 记忆进大纲 prompt（无记忆时零变化）
+    from memory import inject
+    memory_block = inject.format_for_prompt(inject.get_relevant(topic, project_id=pid))
+
     conn = dao.get_conn()
     dao.create_project(conn, topic=topic, pid=pid,
                        skill_id=skill["id"] if skill else None)
 
-    data = outline_node.generate_outline(topic, pid, feedback=feedback, skill=skill)
+    data = outline_node.generate_outline(topic, pid, feedback=feedback, skill=skill,
+                                         memory_block=memory_block)
     (pdir / "script.json").write_text(
         json.dumps({"topic": topic, "outline": data,
                     "skill": skill_name}, ensure_ascii=False, indent=2),

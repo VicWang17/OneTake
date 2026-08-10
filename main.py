@@ -334,5 +334,30 @@ def skills():
                    f" · 风格: {d['style']['visual'][:20]}…")
 
 
+@app.command()
+def memory(
+    action: str = typer.Argument("list", help="list / add / extract"),
+    content: str | None = typer.Argument(None, help="add 时的记忆内容"),
+    type_: str = typer.Option("profile", "--type", "-t", help="profile / episode"),
+):
+    """P6 长期记忆：memory list / memory add "内容" / memory extract（从失败记录提取经验）。"""
+    from memory import extract, store
+    if action == "add":
+        if not content:
+            raise typer.BadParameter("add 需要记忆内容")
+        r = store.add(type_, content)
+        typer.echo(f"已处理（{r['action']}）：{r['content'][:50]}… 置信度 {r.get('confidence')}")
+    elif action == "extract":
+        results = extract.extract_from_failures()
+        typer.echo(f"提取 {len(results)} 条经验记忆：")
+        for r in results:
+            typer.echo(f"  [{r['action']}] {r['content'][:60]}")
+    else:
+        rows = store.list_all()
+        typer.echo(f"共 {len(rows)} 条记忆：")
+        for m in rows:
+            typer.echo(f"  [{m['type']}]（{m['confidence']:.2f}）{m['content'][:60]}")
+
+
 if __name__ == "__main__":
     app()

@@ -46,10 +46,11 @@ REQUIRED_KEYS = {"title", "logline", "audience", "target_duration", "structure",
 
 
 def generate_outline(topic: str, project_id: str, feedback: str | None = None,
-                     skill: dict | None = None) -> dict:
+                     skill: dict | None = None, memory_block: str = "") -> dict:
     """选题 → 大纲 dict（经网关计费）。校验缺字段即抛错（重试在调用方）。
     feedback：脚本确认节点打回时的修改意见，注入 prompt 重新生成。
-    skill：选中的 Skill（P6）——结构与风格由 YAML 给定，不再 LLM 自决。"""
+    skill：选中的 Skill（P6）——结构与风格由 YAML 给定，不再 LLM 自决。
+    memory_block：P6 记忆注入段（偏好与经验，一次注入全程生效）。"""
     user = f"选题：{topic}"
     if skill:
         d = skill["data"]
@@ -60,6 +61,7 @@ def generate_outline(topic: str, project_id: str, feedback: str | None = None,
                  f"\n配音建议：{d['style']['voice']}")
     if feedback:
         user += f"\n\n上次的大纲被退回，修改意见（请采纳并重新设计）：{feedback}"
+    user += memory_block  # 记忆注入放最后（近因效应位置）
     system = OUTLINE_SYSTEM_SKILLED if skill else OUTLINE_SYSTEM
     r = gw.call("llm", {"system": system, "user": user},
                 project_id=project_id)
