@@ -115,6 +115,7 @@ def call(task_type: str, payload: dict[str, Any], tier: str = "draft",
         model = payload.get("model") or {
             "llm": adapters.DEEPSEEK_MODEL, "image": adapters.SEEDREAM_MODEL,
             "video": adapters.SEEDANCE_MODEL, "tts": "edge-tts",
+            "vl": adapters.QWEN_VL_MODEL,
         }.get(task_type, task_type)
         idem_key = _idem_key(task_type, model, payload, tier)
         cached = _try_cache(conn, idem_key, payload.get("out_path"), project_id)
@@ -133,6 +134,8 @@ def call(task_type: str, payload: dict[str, Any], tier: str = "draft",
                 result = _call_video(conn, payload, tier, project_id, idem_key)
             elif task_type == "tts":
                 result = _call_tts(conn, payload, tier, project_id, idem_key)
+            elif task_type == "vl":
+                result = _call_vl(conn, payload, tier, project_id, idem_key)
             else:
                 raise ValueError(f"未知 task_type: {task_type}")
         except Exception as e:
@@ -285,6 +288,26 @@ def _call_video(conn, payload, tier, project_id, idem_key):
         return {"file_path": str(payload["out_path"]), "usage": info.get("usage"),
                 "cost": cost, "model": fb, "latency_ms": latency,
                 "degraded_from": model}
+
+
+def _call_vl(conn, payload, tier, project_id, idem_key):
+    """VLM 质检调用（P7）。payload: {images_b64: [...], prompt} → {data, usage, cost}"""
+    model = adapters.QWEN_VL_MODEL
+    try:
+        data, usage, latency = adapters.qwen_vl_judge(payload["images_b64"],
+                                                      payload["prompt"])
+        cost = pricing.calc_cost(model, usage)
+        dao.log_generation(conn, task_type="vl", model=model, tier=tier,
+                           prompt=payload["prompt"][:1000], usage=usage, cost=cost,
+                           latency_ms=latency, project_id=project_id,
+                           idem_key=idem_key,
+                           result_json=json.dumps({"data": data}, ensure_ascii=False))
+        return {"data": data, "usage": usage, "cost": cost, "model": model}
+    except Exception as e:
+        dao.log_generation(conn, task_type="vl", model=model, tier=tier,
+                           prompt=payload.get("prompt", "")[:500], status="failed",
+                           error=str(e), project_id=project_id)
+        raise
 
 
 def _call_tts(conn, payload, tier, project_id, idem_key):

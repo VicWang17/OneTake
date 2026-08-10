@@ -359,5 +359,15 @@ def memory(
             typer.echo(f"  [{m['type']}]（{m['confidence']:.2f}）{m['content'][:60]}")
 
 
+@app.command()
+def judge(pid: str = typer.Option(..., "--pid", help="项目 ID")):
+    """P7 VLM 质检：全镜头抽帧评分，不合格自动重生成（≤2 次），产出质量报表。"""
+    from pipeline import judge as judge_mod
+    r = judge_mod.judge_project(pid)
+    typer.echo(f"\n质检完成：{r['passed']}/{r['total']} 通过 · "
+               f"一次通过率 {r['first_pass_rate'] * 100:.0f}%")
+    typer.echo(f"报表：{r['report']}")
+
+
 if __name__ == "__main__":
     app()

@@ -178,6 +178,41 @@ def seedance_video(prompt: str, out_path: Path, *, model: str = SEEDANCE_MODEL,
     return {"task_id": task_id, "usage": usage, "model": model}, latency_ms
 
 
+# ---------- 百炼 Qwen-VL（质检，P7） ----------
+
+QWEN_VL_MODEL = "qwen3-vl-flash"
+
+
+def qwen_vl_judge(images_b64: list[str], prompt: str,
+                  max_retries: int = 3) -> tuple[dict, dict, int]:
+    """VLM 质检：多图 + 评审 prompt → 结构化评分。返回 (parsed_json, usage, latency_ms)。"""
+    import json as _json
+
+    from openai import OpenAI
+
+    client = OpenAI(api_key=os.environ["DASHSCOPE_API_KEY"],
+                    base_url=DASHSCOPE_BASE_URL)
+    content = [{"type": "text", "text": prompt}] + [
+        {"type": "image_url", "image_url": {"url": u}} for u in images_b64]
+    last_err: Exception | None = None
+    for attempt in range(1, max_retries + 1):
+        t0 = time.time()
+        try:
+            resp = client.chat.completions.create(
+                model=QWEN_VL_MODEL,
+                messages=[{"role": "user", "content": content}],
+                response_format={"type": "json_object"},
+            )
+            latency_ms = int((time.time() - t0) * 1000)
+            usage = resp.usage.model_dump() if resp.usage else {}
+            return _json.loads(resp.choices[0].message.content), usage, latency_ms
+        except Exception as e:
+            last_err = e
+            if attempt < max_retries:
+                time.sleep(2 * attempt)
+    raise RuntimeError(f"Qwen-VL 调用失败（{max_retries} 次）: {last_err}")
+
+
 # ---------- edge-tts（本地免费，瞬断需重试） ----------
 
 def edge_tts_speak(text: str, out_path: Path, max_retries: int = 3) -> None:
