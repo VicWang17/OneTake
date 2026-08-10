@@ -25,3 +25,7 @@ assets/bgm/*.m4a
 # 运行日志
 logs/
 
+
+# 个人求职材料（不公开）
+career/
+
