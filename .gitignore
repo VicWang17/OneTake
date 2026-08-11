@@ -26,6 +26,9 @@ assets/bgm/*.m4a
 logs/
 
 
-# 个人求职材料（不公开）
+# 个人材料（不公开）
 career/
+
+# 文稿草稿（本地维护）
+docs/retrospective.md
 
