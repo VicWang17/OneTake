@@ -2,12 +2,15 @@
 
 设计：生产者（管线）只 enqueue，执行由本模块的 worker 完成——提交/执行/监控解耦。
 worker 崩溃恢复：run_workers 启动时先 recover_orphans 回收上任遗留的 running 任务。
+单实例约束（P0）：pidfile 启动互斥——第二个实例直接拒绝启动，不做多实例容错承诺。
 同步厂商 SDK 经 asyncio.to_thread 执行，不阻塞事件循环。
 """
 
 import asyncio
 import json
+import os
 import uuid
+from pathlib import Path
 
 from db import dao
 from scheduler import queue
@@ -16,6 +19,37 @@ from serving import registry
 
 # 任务类型 → 处理器（在 handlers.py 注册）
 _HANDLERS: dict[str, callable] = {}
+
+
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)  # 不发送真信号，仅探测进程是否存在
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _acquire_instance_lock(lock_path: Path | None = None) -> Path:
+    """单实例互斥（P0）：pidfile。已有活跃实例 → 拒绝启动；陈旧锁（进程已死）→ 回收。"""
+    lock = lock_path or (dao.DB_PATH.parent / "worker.lock")
+    if lock.exists():
+        try:
+            old_pid = int(lock.read_text().strip())
+        except ValueError:
+            old_pid = -1  # 锁文件损坏按陈旧处理
+        if old_pid > 0 and _pid_alive(old_pid):
+            raise RuntimeError(
+                f"已有 worker 实例在运行（pid={old_pid}）。"
+                f"单实例调度约束：请先停止旧实例，或确认其已退出后删除 {lock}"
+            )
+    lock.write_text(str(os.getpid()))
+    return lock
+
+
+def _release_instance_lock(lock: Path) -> None:
+    lock.unlink(missing_ok=True)
 
 
 def register_handler(type_: str, fn) -> None:
@@ -91,24 +125,28 @@ def _concurrency_of(provider: str) -> int:
 
 
 def run_workers(stop_when_empty: bool = True) -> None:
-    """启动 worker 池（含孤儿回收 + 结果未知对账）。stop_when_empty：队列清空即退出（CLI 批处理模式）。"""
-    worker_id = f"w-{uuid.uuid4().hex[:8]}"
-    conn = dao.get_conn()
-    n_orphans = queue.recover_orphans(conn, worker_id)
-    if n_orphans:
-        print(f"    [worker] 回收上任遗留 running 任务 {n_orphans} 个")
-    reconciled = queue.reconcile_unknown(conn)
-    if reconciled:
-        print(f"    [worker] 对账 {len(reconciled)} 个结果未知任务"
-              f"（凭 task_id 续查供应商状态，不重复提交）")
-    conn.close()
+    """启动 worker 池（单实例互斥 + 孤儿回收 + 结果未知对账）。stop_when_empty：队列清空即退出（CLI 批处理模式）。"""
+    lock = _acquire_instance_lock()
+    try:
+        worker_id = f"w-{uuid.uuid4().hex[:8]}"
+        conn = dao.get_conn()
+        n_orphans = queue.recover_orphans(conn, worker_id)
+        if n_orphans:
+            print(f"    [worker] 回收上任遗留 running 任务 {n_orphans} 个")
+        reconciled = queue.reconcile_unknown(conn)
+        if reconciled:
+            print(f"    [worker] 对账 {len(reconciled)} 个结果未知任务"
+                  f"（凭 task_id 续查供应商状态，不重复提交）")
+        conn.close()
 
-    async def _main():
-        workers = [asyncio.create_task(_worker(f"{worker_id}-{i}", {}, stop_when_empty))
-                   for i in range(3)]
-        await asyncio.gather(*workers)
+        async def _main():
+            workers = [asyncio.create_task(_worker(f"{worker_id}-{i}", {}, stop_when_empty))
+                       for i in range(3)]
+            await asyncio.gather(*workers)
 
-    asyncio.run(_main())
+        asyncio.run(_main())
+    finally:
+        _release_instance_lock(lock)
 
 
 def handler_for(type_: str):

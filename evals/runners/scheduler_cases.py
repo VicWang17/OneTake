@@ -7,6 +7,7 @@ fr-08（重复恢复幂等 + 过期 Attempt）。
 """
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -18,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 
 from db import dao  # noqa: E402
 from gateway import core as gw  # noqa: E402
-from scheduler import handlers, queue  # noqa: E402
+from scheduler import handlers, queue, worker  # noqa: E402
 
 
 def _git_sha() -> str:
@@ -128,6 +129,33 @@ def run_fr03(conn) -> dict:
             "verdict": "pass" if all(ok for _, ok in checks) else "fail"}
 
 
+def run_instance_mutex(tmp: Path) -> dict:
+    """instance-mutex：单实例启动互斥——活跃实例拒绝二开；陈旧锁自动回收。"""
+    checks = []
+    lock = tmp / "worker.lock"
+
+    # 本进程持锁（活跃）→ 第二次获取必须被拒绝
+    worker._acquire_instance_lock(lock)
+    try:
+        worker._acquire_instance_lock(lock)
+        rejected = False
+    except RuntimeError:
+        rejected = True
+    checks.append(("second_instance_rejected", rejected))
+
+    # 写入死进程 PID（陈旧锁）→ 回收接管成功，锁归本进程
+    lock.write_text("99999999")
+    worker._acquire_instance_lock(lock)
+    checks.append(("stale_lock_reclaimed",
+                   lock.read_text().strip() == str(os.getpid())))
+
+    worker._release_instance_lock(lock)
+    checks.append(("lock_released", not lock.exists()))
+
+    return {"case_id": "instance-mutex", "checks": checks,
+            "verdict": "pass" if all(ok for _, ok in checks) else "fail"}
+
+
 def main() -> None:
     results = []
     with tempfile.TemporaryDirectory() as tmp:
@@ -137,6 +165,7 @@ def main() -> None:
             conn.commit()
             results.append(case_fn(conn))
         conn.close()
+        results.append(run_instance_mutex(Path(tmp)))
 
     sha = _git_sha()
     report = {
