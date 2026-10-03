@@ -195,3 +195,11 @@
 - **落地**：`evals/cases/` 五个家族文件共 30 用例（dev 20 / holdout 10），字段覆盖计划 §2.2 要求的 12 项；README 定义字段语义与计分口径
 - **关键设计决策**：① 局部修改（le）与多轮约束（cc）全部 `baseline: unsupported`——当前系统没有这些入口，按计划 §2.3 基线轮直接计未通过，不许为完成用例临时手工改代码；② fixture 只定引用名（如 `fixtures/projects/le_base_microwave/`），捕获动作留到运行器实现时，避免现在拷贝一堆大文件入库；③ 预算停止/取消/转人工类用例 `expected` 标 `stop/escalate`，只计入预期行为通过率，不污染交付完成率分母
 - **经验**：① 评测设计的第一原则是防自欺——开发/留出集同源泄漏、unsupported 装成能力、正确拒绝算成交付，是三个最常见的注水手法，都要在用例层就堵死；② 验收器（verifiers）尽量写成确定性判定（哈希不变/时长区间/状态机终态），VLM 只留给画面内容这种绕不开主观判断的场景——确定性用例可以无限重跑不花钱，主观用例每次都有成本和方差；③ 故障注入方法优先选「计费前拒绝」「kill -9」「截断文件」这类零/低成本手段（沿用 DEVLOG 021b 的演练思想），真实付费故障只留少量
+
+### 026 x86_64 新机装不了 ffmpeg-full：CLT 过旧与静态构建兜底
+
+- **现象**：`brew install ffmpeg-full` 报 `Error: Your Command Line Tools are too outdated`，安装中断未产生 keg（且 `cmd | tail` 的管道把 brew 的非零退出码吞成 0，日志末尾才看到错误）
+- **排查**：本机 macOS 26.6.2（Tahoe）+ Intel，CLT 16.4 远低于当前 Xcode 26.6 对应的 CLT；Homebrew 对 Intel + macOS 26 组合降为 Tier 3 支持，部分依赖无 bottle 需源码编译 → 触发 CLT 检查 → 失败。升级 CLT 需 sudo/GUI 交互，且 Intel 版 macOS 本身已进入停更倒计时
+- **根因**：brew 路线在这台机器上整体受限（不止 ffmpeg，今后任何需编译的 formula 都会撞同一堵墙）
+- **解决**：启用 TODO 里早已记载的方案 B——Martin Riedl 静态构建（含 libass/fontconfig，签名二进制，`ffmpeg.martin-riedl.de` 提供 macOS amd64 release 构建，2027 年 1 月前持续更新）。装到用户目录 `~/.local/opt/ffmpeg-mr/bin/`（免 sudo）；`editing/ffmpeg.py` 的 `_default_bin()` 改为三级探测：brew arm64 → brew x86_64 → 静态构建。真实验证：中文硬字幕烧录 + 抽帧目检通过（Hiragino Sans GB 渲染正常、描边正常）
+- **经验**：① 文档里"留着备用的方案 B"会在换机/平台停支持时救命——降级路径写在文档里不是冗余，是保险；② 管道会吞退出码：`brew install ... | tail` 失败也返回 0，关键安装命令要么不用管道要么 `set -o pipefail`；③ 平台支持等级（Homebrew Tier 1/2/3）是选型维度——Tier 3 意味着"能跑但没人保证"，Intel Mac 用户今后遇到 brew 怪事先查支持等级；④ 代码层的多级自动探测（brew 两前缀 + 静态兜底）比写死单一路径更耐环境漂移，这是 DEVLOG 024 的直接改进

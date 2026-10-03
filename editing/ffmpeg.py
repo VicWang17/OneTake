@@ -7,7 +7,21 @@ import os
 import subprocess
 from pathlib import Path
 
-_DEFAULT_BIN = "/opt/homebrew/opt/ffmpeg-full/bin"
+def _default_bin() -> str:
+    # 候选顺序：brew ffmpeg-full（arm64=/opt/homebrew，x86_64=/usr/local）
+    # → Martin Riedl 静态构建（~/.local/opt/ffmpeg-mr，免 sudo 兜底，见 README）
+    candidates = [
+        Path("/opt/homebrew/opt/ffmpeg-full/bin"),
+        Path("/usr/local/opt/ffmpeg-full/bin"),
+        Path.home() / ".local/opt/ffmpeg-mr/bin",
+    ]
+    for cand in candidates:
+        if (cand / "ffmpeg").exists():
+            return str(cand)
+    return "/opt/homebrew/opt/ffmpeg-full/bin"  # 均未命中时保持旧默认值，报错路径易排查
+
+
+_DEFAULT_BIN = _default_bin()
 FFMPEG = os.environ.get("FFMPEG_PATH", f"{_DEFAULT_BIN}/ffmpeg")
 FFPROBE = os.environ.get(
     "FFPROBE_PATH", str(Path(FFMPEG).with_name("ffprobe"))

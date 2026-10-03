@@ -16,9 +16,9 @@ OneTake（一条过）：端到端 AI 视频创作 Agent 工作台 + 其下的�
 1. 所有外部模型调用的唯一入口是模型服务层（管线节点不得直接 import 厂商 SDK）
 2. 所有异步重负载的唯一入口是任务调度器（jobs 表）
 
-## 3. 环境约定（2026-08-04 实测核实，勿凭记忆假设）
+## 3. 环境约定（2026-08-04 实测核实，2026-10-03 适配 x86_64 新机，勿凭记忆假设）
 
-- **FFmpeg**：一律使用 full 版 `/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg`（全局 homebrew ffmpeg 是 lite 版，无 libass，烧不了字幕）。代码中走 `FFMPEG_PATH` 环境变量，默认值即上述路径；ffprobe 同理取同目录
+- **FFmpeg**：一律使用 full 版（全局 homebrew ffmpeg 是 lite 版，无 libass，烧不了字幕）。三级获取路径，代码未设 `FFMPEG_PATH` 时 `editing/ffmpeg.py` 按序自动探测：① brew `ffmpeg-full`（arm64=`/opt/homebrew/opt/ffmpeg-full/bin`，x86_64=`/usr/local/opt/ffmpeg-full/bin`）② Martin Riedl 静态构建（`~/.local/opt/ffmpeg-mr/bin`，免 sudo 兜底，2026-10-03 实测字幕烧录通过）。注意：当前 x86_64 开发机 CLT 过旧导致 brew 装不了 ffmpeg-full，走的是路径 ②；ffprobe 同理取同目录
 - **TTS**：edge-tts 免费可用但有瞬断（NoAudioReceived），调用层必须重试 ≤3 次；备选火山 TTS（¥1–5/万字符）
 - **模型与价格**：以 `serving/pricing.py` 为唯一事实源（2026-08-04 核实版）。关键结论：DeepSeek 用 `deepseek-v4-flash`；VL 质检用 `qwen3-vl-flash`；Seedance 2.0 按 token 计费（贵），草稿档用 1.5 pro 样片模式或可灵 2.5 Turbo（¥0.3/s）；P0 需实测对比后定主力
 - **预算**：全项目充值 ≤¥300；网关/服务层日熔断 `DAILY_BUDGET_LIMIT=15`，写代码时这是硬约束不是可选项
