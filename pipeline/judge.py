@@ -4,6 +4,7 @@
 """
 
 import json
+import os
 from pathlib import Path
 
 from db import dao
@@ -16,6 +17,14 @@ PROJECTS_DIR = ROOT / "projects"
 MAX_REGEN = 2
 
 
+def _next_version_path(pdir: Path, idx: int) -> Path:
+    """下一个候选版本路径：shot_XX_src.vN.mp4（N 从 2 递增，避开已存在的版本）。"""
+    ver = 2
+    while (pdir / "clips" / f"shot_{idx:02d}_src.v{ver}.mp4").exists():
+        ver += 1
+    return pdir / "clips" / f"shot_{idx:02d}_src.v{ver}.mp4"
+
+
 def judge_project(pid: str) -> dict:
     pdir = PROJECTS_DIR / pid
     script = json.loads((pdir / "script.json").read_text(encoding="utf-8"))
@@ -24,34 +33,39 @@ def judge_project(pid: str) -> dict:
 
     for s in script["shots"]:
         idx = int(s["idx"])
-        video = pdir / "clips" / f"shot_{idx:02d}_src.mp4"
-        if not video.exists():
+        original = pdir / "clips" / f"shot_{idx:02d}_src.mp4"
+        if not original.exists():
             continue
-        attempts, issue = 0, None
+        current, attempts, issue = original, 0, None
         while True:
-            r = judge.judge_shot(video, s["visual_prompt"], s.get("narration", ""),
+            r = judge.judge_shot(current, s["visual_prompt"], s.get("narration", ""),
                                  pid, prev_issue=issue)
             r["idx"], r["attempts"] = idx, attempts + 1
             if r["passed"]:
+                if current != original:  # 新版本通过质检：原子切换引用
+                    os.replace(current, original)
+                    r["switched"] = True
                 break
             attempts += 1
             issue = r["issues"] or "评分不达标"
             if attempts > MAX_REGEN:
                 r["final"] = "人工介入"
+                r["kept_old_version"] = True  # 旧版不动，失败候选留作证据
                 break
-            # 重生成：把失败原因写进运动提示词（删旧片 → 重新生成 → 复评）
+            # 重生成（P0 版本切换语义）：先写新版本文件，通过质检后才替换引用；
+            # 失败则旧版本与失败证据（vN 文件）都保留。失败原因写进运动提示词
             print(f"    shot {idx:02d} 不合格（语义 {r['semantic']} 质量 {r['quality']}："
                   f"{issue[:40]}），第 {attempts} 次重生成…")
-            video.unlink()
+            candidate = _next_version_path(pdir, idx)
             gw.call("video", {
                 "prompt": s.get("motion_prompt", s["visual_prompt"])
                           + f"。避免以下问题：{issue}",
-                "out_path": str(video),
+                "out_path": str(candidate),
                 "model": "doubao-seedance-2-0-fast-260128",
                 "seconds": 5, "resolution": "480p",
                 "first_frame_url": None,  # 重生成走文生视频（避免首帧锚定延续错误构图）
             }, project_id=pid)
-            r["regen"] = attempts
+            current = candidate
         report.append(r)
         dao.update_shot(conn, f"{pid}-s{idx:02d}",
                         status="judged" if r["passed"] else "judge_failed")

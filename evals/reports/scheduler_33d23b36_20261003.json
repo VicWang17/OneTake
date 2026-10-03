@@ -1,0 +1,60 @@
+{
+  "runner": "evals/runners/scheduler_cases.py",
+  "git_sha": "33d23b361ef63487d4281150b6027fdcb5da55ef",
+  "run_at": "2026-10-03 16:49:52",
+  "layer": "deterministic (temp sqlite, no api)",
+  "results": [
+    {
+      "case_id": "fr-05",
+      "checks": [
+        {
+          "check": "claimed_by_dead_worker",
+          "ok": true
+        },
+        {
+          "check": "stuck_running",
+          "ok": true
+        },
+        {
+          "check": "orphans_recovered",
+          "ok": true
+        },
+        {
+          "check": "rolled_back_pending",
+          "ok": true
+        },
+        {
+          "check": "reclaimed",
+          "ok": true
+        },
+        {
+          "check": "succeeded",
+          "ok": true
+        },
+        {
+          "check": "no_running_left",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "fr-08",
+      "checks": [
+        {
+          "check": "first_recovery_rollback",
+          "ok": true
+        },
+        {
+          "check": "double_recovery_idempotent",
+          "ok": true
+        },
+        {
+          "check": "stale_attempt_not_applied",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    }
+  ]
+}
