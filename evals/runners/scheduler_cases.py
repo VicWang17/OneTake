@@ -48,7 +48,7 @@ def run_fr05(conn) -> dict:
     # worker B 重领并完成
     job = queue.claim(conn, "w-live")
     checks.append(("reclaimed", job is not None and job["id"] == jid))
-    queue.complete(conn, jid)
+    queue.complete(conn, jid, "w-live")
     checks.append(("succeeded", _job(conn, jid)["status"] == "succeeded"))
     checks.append(("no_running_left", queue.stats(conn).get("running", 0) == 0))
 
@@ -71,18 +71,16 @@ def run_fr08(conn) -> dict:
     # 第二部分：过期 Attempt 覆盖测试
     # 新 worker 领走任务并失败一次（→ pending 退避中），此时旧 worker 的"迟到 complete"到达
     queue.claim(conn, "w-live")
-    queue.fail(conn, jid, "transient error")
+    queue.fail(conn, jid, "transient error", "w-live")
     stale_overwrote = None
     row_before = _job(conn, jid)
     if row_before["status"] == "pending":
-        queue.complete(conn, jid)  # 模拟旧 Attempt 迟到的成功回写（complete 无状态/归属守卫）
+        queue.complete(conn, jid, "w-dead")  # 旧 Attempt 迟到的成功回写，应被守卫拒绝
         stale_overwrote = _job(conn, jid)["status"] == "succeeded"
     checks.append(("stale_attempt_not_applied", stale_overwrote is False))
 
     return {"case_id": "fr-08", "checks": checks,
-            "verdict": "pass" if all(ok for _, ok in checks) else "fail",
-            "note": "stale_attempt_not_applied 失败 = 当前 complete() 无状态守卫的已知缺口"
-                    if stale_overwrote else None}
+            "verdict": "pass" if all(ok for _, ok in checks) else "fail"}
 
 
 def main() -> None:
@@ -95,9 +93,10 @@ def main() -> None:
             results.append(case_fn(conn))
         conn.close()
 
+    sha = _git_sha()
     report = {
         "runner": "evals/runners/scheduler_cases.py",
-        "git_sha": _git_sha(),
+        "git_sha": sha,
         "run_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "layer": "deterministic (temp sqlite, no api)",
         "results": [
@@ -105,7 +104,8 @@ def main() -> None:
             for r in results
         ],
     }
-    out = ROOT / "evals/reports" / f"scheduler_baseline_{time.strftime('%Y%m%d')}.json"
+    # 文件名带 SHA 与日期：不同代码版本的报告各自留存，不互相覆盖（基线须可对照）
+    out = ROOT / "evals/reports" / f"scheduler_{sha[:8]}_{time.strftime('%Y%m%d')}.json"
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
     for r in results:

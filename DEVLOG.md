@@ -211,3 +211,9 @@
 - **根因**：`queue.complete()` 是无条件 UPDATE，无状态守卫（`WHERE status='running'`）也无归属守卫（`AND worker_id=?`）——静态读代码时的怀疑，运行器用 20 行模拟证实了
 - **处置**：不修（基线阶段纪律：先冻结再改）；该缺口进 P0「结果未知/过期 Attempt」修复清单，届时以本用例转绿为验收
 - **经验**：① 基线评测的价值立竿见影——第一天就抓到一个静态审查「看着像问题」但从未被证实的正确性缺口，且有了可重复触发的最小复现；② 确定性层的威力：这个 bug 在真实环境要「worker 崩溃 + 任务失败退避 + 旧回写迟到」三者巧合才暴露，运行器里三行代码稳定复现；③ 先写运行器再改代码的纪律让每个 P0 修复都有明确的「红→绿」对照，避免修完说「应该好了」
+
+### 028 fr-08 红→绿：complete/fail 加状态与归属双守卫
+
+- **修复**：`queue.complete()`/`fail()` 的 UPDATE 增加 `WHERE status='running' AND worker_id=?` 双守卫，worker 传入自己的 worker_id；回写被拒（过期 Attempt）时记 `job_done_rejected`/`job_fail_rejected` WARN 日志而非静默
+- **验证**：fr-08 `stale_attempt_not_applied` 转绿，fr-05 保持绿；两份报告按 `scheduler_<sha8>_<date>.json` 命名各自留存（基线 2244ae9 全绿前 vs 修复后 c410130 之后）——顺手修了运行器「同日覆盖基线报告」的命名缺陷
+- **经验**：① 「守卫式 UPDATE」（条件更新 + rowcount 判生效）是 SQLite 单库并发下最便宜的乐观锁——claim 防双领用的就是它（DEVLOG 021b），这次是把同一思想补到回写路径；② 评测报告文件名必须含代码版本标识，否则「基线」会被后续运行悄悄覆盖——可对照性从文件命名开始；③ 状态机写路径的守卫要成对审计：claim 有守卫、complete/fail 没有，说明当初只防了「领」没防「回」——同类代码路径的防护要一次查全

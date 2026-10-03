@@ -58,14 +58,21 @@ async def _worker(worker_id: str, sems: dict[str, asyncio.Semaphore],
             try:
                 # 同步 SDK 放线程里跑，事件循环不被阻塞
                 await asyncio.to_thread(handler, conn, job["id"], payload)
-                queue.complete(conn, job["id"])
-                olog.log("job_done", job_id=job["id"], type=job["type"])
-                from datapipe import events
-                events.emit("job", ref_id=job["id"], type=job["type"],
-                            outcome="succeeded", retry=job["retry_count"])
-                print(f"    [worker] job {job['id']} ({job['type']}) ✓")
+                if queue.complete(conn, job["id"], worker_id):
+                    olog.log("job_done", job_id=job["id"], type=job["type"])
+                    from datapipe import events
+                    events.emit("job", ref_id=job["id"], type=job["type"],
+                                outcome="succeeded", retry=job["retry_count"])
+                    print(f"    [worker] job {job['id']} ({job['type']}) ✓")
+                else:  # 任务已被回收/重排，本次回写是过期 Attempt，丢弃
+                    olog.log("job_done_rejected", level="WARN", job_id=job["id"],
+                             type=job["type"], reason="ownership_lost")
             except Exception as e:  # noqa: BLE001
-                new_status = queue.fail(conn, job["id"], str(e)[:200])
+                new_status = queue.fail(conn, job["id"], str(e)[:200], worker_id)
+                if new_status is None:  # 同上：过期回写，丢弃
+                    olog.log("job_fail_rejected", level="WARN", job_id=job["id"],
+                             type=job["type"], reason="ownership_lost")
+                    continue
                 olog.log("job_fail", level="ERROR", job_id=job["id"],
                          type=job["type"], new_status=new_status,
                          error=str(e)[:200])

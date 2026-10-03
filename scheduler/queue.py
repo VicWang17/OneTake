@@ -46,16 +46,25 @@ def claim(conn: sqlite3.Connection, worker_id: str) -> sqlite3.Row | None:
     return row if cur.rowcount else None
 
 
-def complete(conn: sqlite3.Connection, job_id: str) -> None:
-    conn.execute("UPDATE jobs SET status = 'succeeded', finished_at = ? WHERE id = ?",
-                 (_now(), job_id))
+def complete(conn: sqlite3.Connection, job_id: str, worker_id: str) -> bool:
+    """完成回写：仅当任务仍 running 且归属本 worker 才生效（防过期 Attempt 覆盖新状态）。"""
+    cur = conn.execute(
+        "UPDATE jobs SET status = 'succeeded', finished_at = ?"
+        " WHERE id = ? AND status = 'running' AND worker_id = ?",
+        (_now(), job_id, worker_id))
     conn.commit()
+    return cur.rowcount > 0
 
 
-def fail(conn: sqlite3.Connection, job_id: str, error: str) -> str:
-    """失败处理：未超限 → pending + 退避；超限 → dead。返回新状态。"""
-    row = conn.execute("SELECT retry_count, max_retries FROM jobs WHERE id = ?",
-                       (job_id,)).fetchone()
+def fail(conn: sqlite3.Connection, job_id: str, error: str, worker_id: str) -> str | None:
+    """失败处理：未超限 → pending + 退避；超限 → dead。返回新状态。
+    仅当任务仍 running 且归属本 worker 才生效（否则返回 None，过期回写丢弃）。"""
+    row = conn.execute(
+        "SELECT retry_count, max_retries FROM jobs"
+        " WHERE id = ? AND status = 'running' AND worker_id = ?",
+        (job_id, worker_id)).fetchone()
+    if not row:
+        return None
     rc = row["retry_count"] + 1
     if rc >= row["max_retries"]:
         conn.execute("UPDATE jobs SET status = 'dead', retry_count = ?,"
