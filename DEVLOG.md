@@ -203,3 +203,11 @@
 - **根因**：brew 路线在这台机器上整体受限（不止 ffmpeg，今后任何需编译的 formula 都会撞同一堵墙）
 - **解决**：启用 TODO 里早已记载的方案 B——Martin Riedl 静态构建（含 libass/fontconfig，签名二进制，`ffmpeg.martin-riedl.de` 提供 macOS amd64 release 构建，2027 年 1 月前持续更新）。装到用户目录 `~/.local/opt/ffmpeg-mr/bin/`（免 sudo）；`editing/ffmpeg.py` 的 `_default_bin()` 改为三级探测：brew arm64 → brew x86_64 → 静态构建。真实验证：中文硬字幕烧录 + 抽帧目检通过（Hiragino Sans GB 渲染正常、描边正常）
 - **经验**：① 文档里"留着备用的方案 B"会在换机/平台停支持时救命——降级路径写在文档里不是冗余，是保险；② 管道会吞退出码：`brew install ... | tail` 失败也返回 0，关键安装命令要么不用管道要么 `set -o pipefail`；③ 平台支持等级（Homebrew Tier 1/2/3）是选型维度——Tier 3 意味着"能跑但没人保证"，Intel Mac 用户今后遇到 brew 怪事先查支持等级；④ 代码层的多级自动探测（brew 两前缀 + 静态兜底）比写死单一路径更耐环境漂移，这是 DEVLOG 024 的直接改进
+
+### 027 运行器首个实证：fr-08「过期 Attempt 覆盖」从纸面推测变成实测失败
+
+- **落地**：`evals/runners/scheduler_cases.py`——临时 SQLite + 直接驱动 `scheduler/queue` 状态机，零 API 成本；报告落 `evals/reports/scheduler_baseline_20261003.json`（含 git_sha/逐项检查/verdict）
+- **结果**：fr-05（崩溃孤儿回收）pass，与 DEVLOG 021b 演练结论互证；fr-08 的 double_recovery_idempotent pass，但 **stale_attempt_not_applied fail**——旧 worker 迟到的 `complete()` 把已退避重排的任务错误标成 succeeded
+- **根因**：`queue.complete()` 是无条件 UPDATE，无状态守卫（`WHERE status='running'`）也无归属守卫（`AND worker_id=?`）——静态读代码时的怀疑，运行器用 20 行模拟证实了
+- **处置**：不修（基线阶段纪律：先冻结再改）；该缺口进 P0「结果未知/过期 Attempt」修复清单，届时以本用例转绿为验收
+- **经验**：① 基线评测的价值立竿见影——第一天就抓到一个静态审查「看着像问题」但从未被证实的正确性缺口，且有了可重复触发的最小复现；② 确定性层的威力：这个 bug 在真实环境要「worker 崩溃 + 任务失败退避 + 旧回写迟到」三者巧合才暴露，运行器里三行代码稳定复现；③ 先写运行器再改代码的纪律让每个 P0 修复都有明确的「红→绿」对照，避免修完说「应该好了」
