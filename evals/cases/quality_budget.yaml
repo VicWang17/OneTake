@@ -1,0 +1,138 @@
+# 质量与预算（qb）：低分素材、冲突偏好、重复失败、预算不足；修复或正确停止
+# 计分：stop/escalate 只计入预期行为通过率，不计入交付完成率
+
+cases:
+  - case_id: qb-01
+    set: dev
+    goal: 低分镜头触发有限修复，新版本验证通过后替换且不删旧素材
+    topic: null
+    skill: any
+    initial_assets: fixtures/projects/qb_base_low_quality/   # 含一个预置低分镜头的项目
+    interactions: []
+    key_facts: []
+    hard_constraints:
+      - VLM 低分（<3）触发重生成 ≤2 次
+      - 新版本通过后才切换引用；失败则旧版本与失败证据均保留
+      - 重生成次数有上限，到限转人工标记
+    allowed_scope: full
+    fault_injection: null
+    expected: {baseline: deliver, final: deliver}
+    verifiers:
+      - regen_triggered_max: 2
+      - old_artifact_retained: true
+      - quality_json_updated: true
+    budget_cny: 5
+
+  - case_id: qb-02
+    set: dev
+    goal: 同一镜头连续失败 3 次 → 正确停止并标记人工，不误报完成
+    topic: null
+    skill: any
+    initial_assets: fixtures/projects/fr_base_video_ready/
+    interactions: []
+    key_facts: []
+    hard_constraints:
+      - 重试 ≤3 后任务进 dead / 标记人工介入
+      - 项目状态 ≠ 已完成；report 如实显示失败镜头
+    allowed_scope: full
+    fault_injection:
+      point: before_vendor_call
+      method: persistent_vendor_error   # 计费前拒绝类错误，零成本
+    expected: {baseline: escalate, final: escalate}
+    verifiers:
+      - retries_max: 3
+      - job_terminal: dead
+      - completion_not_claimed: true
+    budget_cny: 1
+
+  - case_id: qb-03
+    set: dev
+    goal: 日预算熔断触发 → 正确停止，剩余镜头不强行生成
+    topic: "空间站里的水是怎么循环的？"
+    skill: any
+    initial_assets: null
+    interactions: []
+    key_facts: []
+    hard_constraints:
+      - 熔断后新付费调用全部被拦（BudgetExceededError）
+      - 系统状态为「预算停止」而非「完成」
+      - 提额/次日后可幂等续跑
+    allowed_scope: full
+    fault_injection:
+      point: mid_pipeline
+      method: low_daily_budget   # 临时将 DAILY_BUDGET_LIMIT 调至当前花费附近
+    expected: {baseline: stop, final: stop}
+    verifiers:
+      - budget_circuit_breaker_fired: true
+      - status_is_budget_stopped: true
+      - resumable_after_limit_raised: true
+    budget_cny: 8
+
+  - case_id: qb-04
+    set: dev
+    goal: 冲突偏好修复：历史记忆与当前要求冲突时当前优先且可追溯
+    topic: "为什么冰块会浮在水面上？"
+    skill: knowledge_explainer_v1
+    initial_assets: null
+    interactions:
+      - turn: 1
+        input: "不要任何标题党风格，平实一点"
+    key_facts:
+      - "预置记忆：标题必须带数字（profile）"
+      - "当前请求：平实不要标题党"
+    hard_constraints:
+      - 最终标题不带数字、不标题党
+      - 冲突处理留痕；临时选择不升级为长期偏好（记忆不被改写）
+    allowed_scope: full
+    fault_injection: null
+    expected: {baseline: unsupported, final: deliver}
+    verifiers:
+      - outline_title_not_contains_digits: true
+      - conflict_resolution_logged: true
+      - memory_not_overwritten: true
+    budget_cny: 12
+
+  - case_id: qb-05
+    set: holdout
+    goal: 用户中途取消 → 状态正确，已产素材保留，不误报完成
+    topic: "萤火虫为什么会发光？"
+    skill: any
+    initial_assets: null
+    interactions:
+      - turn: 1
+        input: "<分镜图确认点输入取消>"
+    key_facts: []
+    hard_constraints:
+      - 项目状态为「已取消」，非完成非失败
+      - 已生成的素材保留可复用
+      - 取消后不再产生新付费调用
+    allowed_scope: full
+    fault_injection: null
+    expected: {baseline: unsupported, final: stop}
+    verifiers:
+      - status_is_cancelled: true
+      - no_new_spend_after_cancel: true
+      - artifacts_retained: true
+    budget_cny: 4
+
+  - case_id: qb-06
+    set: holdout
+    goal: 低分修复中撞预算上限 → 正确停止（质量不降级糊弄）
+    topic: null
+    skill: any
+    initial_assets: fixtures/projects/qb_base_low_quality/
+    interactions: []
+    key_facts: []
+    hard_constraints:
+      - 重生成被熔断拦截后停止并保留旧版本
+      - 不以低分旧版本冒充通过
+    allowed_scope: full
+    fault_injection:
+      point: during_quality_regen
+      method: low_daily_budget
+    expected: {baseline: unsupported, final: stop}
+    verifiers:
+      - budget_circuit_breaker_fired: true
+      - old_artifact_retained: true
+      - completion_not_claimed: true
+    budget_cny: 3

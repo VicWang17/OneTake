@@ -1,0 +1,180 @@
+# 失败与恢复（fr）：在提交前/供应商受理后/产物写入后等位置注入故障；恢复后对账
+# 度量核心：恢复完成率、无重复提交、无错误缓存复用。确定性层优先（fake provider/快照），真实调用少量
+
+cases:
+  - case_id: fr-01
+    set: dev
+    goal: 分镜生成阶段 kill -9，恢复后无重复 LLM 扣费
+    topic: "路由器天线数量越多信号越好吗？"
+    skill: any
+    initial_assets: null
+    interactions: []
+    key_facts: []
+    hard_constraints:
+      - 恢复后已完成的 LLM 调用全部缓存命中（花费差额 ¥0）
+      - 最终正常交付
+    allowed_scope: full
+    fault_injection:
+      point: storyboard_done_images_pending
+      method: kill_minus_9
+    expected: {baseline: deliver, final: deliver}
+    verifiers:
+      - resume_from_checkpoint: true
+      - spend_delta_after_resume: 0
+      - files_exist: ["final/draft.mp4"]
+    budget_cny: 12
+
+  - case_id: fr-02
+    set: dev
+    goal: 分镜图批量生成中途 kill，恢复后已出图零重做
+    topic: "路由器天线数量越多信号越好吗？"
+    skill: any
+    initial_assets: fixtures/checkpoints/fr02_mid_images/   # 出到一半的快照（也可现场注入）
+    interactions: []
+    key_facts: []
+    hard_constraints:
+      - 已落盘图片哈希不变、不重调 API
+      - 仅补齐缺失镜头
+    allowed_scope: full
+    fault_injection:
+      point: images_half_done
+      method: kill_minus_9
+    expected: {baseline: deliver, final: deliver}
+    verifiers:
+      - artifacts_unchanged_hash: {kinds: [image]}
+      - spend_delta_after_resume_max: 1.0
+      - files_exist: ["final/draft.mp4"]
+    budget_cny: 8
+
+  - case_id: fr-03
+    set: dev
+    goal: 视频任务已提交供应商、本地未记账时中断 → 凭 task_id 续查，不重复提交
+    topic: null
+    skill: any
+    initial_assets: fixtures/projects/fr_base_video_ready/   # 已到视频生成阶段的项目
+    interactions: []
+    key_facts: []
+    hard_constraints:
+      - 同一 vendor task_id 不重复提交（对账 jobs.payload）
+      - 结果未知窗口有明确状态（不重复扣费也不误报成功）
+    allowed_scope: full
+    fault_injection:
+      point: vendor_accepted_before_local_record
+      method: kill_minus_9
+    expected: {baseline: deliver, final: deliver}
+    verifiers:
+      - no_duplicate_vendor_submission: true
+      - vendor_task_id_reconciled: true
+      - unknown_result_window_documented: true
+    budget_cny: 4
+
+  - case_id: fr-04
+    set: dev
+    goal: 产物写入中断（截断的 mp4）不得被当作成功复用
+    topic: null
+    skill: any
+    initial_assets: fixtures/projects/fr_base_video_ready/
+    interactions: []
+    key_facts: []
+    hard_constraints:
+      - 截断文件被检出（ffprobe 校验失败）→ 该镜重新生成
+      - 其余镜头正常复用
+    allowed_scope: full
+    fault_injection:
+      point: after_artifact_write
+      method: truncate_file   # 将某镜头 clip 截断为前 50%
+    expected: {baseline: unsupported, final: deliver}
+    verifiers:
+      - corrupted_artifact_detected: true
+      - regenerated_only: {corrupted_shots: true}
+      - files_exist: ["final/draft.mp4"]
+    budget_cny: 4
+
+  - case_id: fr-05
+    set: dev
+    goal: worker 崩溃后孤儿任务回收重跑，无丢失无重复扣费
+    topic: null
+    skill: any
+    initial_assets: null   # 纯调度器层用例：sleep/假任务即可，零 API 成本
+    interactions: []
+    key_facts: []
+    hard_constraints:
+      - running 状态任务被 recover_orphans 回收并完成
+      - 无任务滞留 running
+    allowed_scope: full
+    fault_injection:
+      point: worker_running
+      method: kill_minus_9
+    expected: {baseline: deliver, final: deliver}
+    verifiers:
+      - orphans_recovered: true
+      - jobs_terminal_state_consistent: true
+    budget_cny: 0
+
+  - case_id: fr-06
+    set: holdout
+    goal: graph 入口 interrupt 等待中进程重启，确认语义与线性入口一致
+    topic: "海马为什么是雄性生育？"
+    skill: any
+    initial_assets: null
+    interactions:
+      - turn: 1
+        input: "<脚本确认点进程被杀，重启后继续确认 y>"
+    key_facts: []
+    hard_constraints:
+      - checkpoint 恢复到同一确认点，不重复已确认阶段的付费调用
+      - graph 与线性入口的确认/反馈语义一致
+    allowed_scope: full
+    fault_injection:
+      point: at_human_interrupt
+      method: kill_minus_9
+    expected: {baseline: deliver, final: deliver}
+    verifiers:
+      - resume_at_same_interrupt: true
+      - spend_delta_after_resume: 0
+      - confirmation_semantics_parity: [linear, graph]
+    budget_cny: 12
+
+  - case_id: fr-07
+    set: holdout
+    goal: 供应商故障（视频标准档不可用）→ 降级链接管并留痕
+    topic: null
+    skill: any
+    initial_assets: fixtures/projects/fr_base_video_ready/
+    interactions: []
+    key_facts: []
+    hard_constraints:
+      - 自动切备胎档完成生成
+      - generations 表有 degraded_from 记录
+      - 降级产物不写 idem_key（不污染缓存）
+    allowed_scope: full
+    fault_injection:
+      point: before_vendor_call
+      method: invalid_primary_model   # 注册表临时置主力为无效模型
+    expected: {baseline: deliver, final: deliver}
+    verifiers:
+      - fallback_engaged: true
+      - degraded_from_logged: true
+      - degraded_result_not_cached: true
+    budget_cny: 4
+
+  - case_id: fr-08
+    set: holdout
+    goal: 重复恢复/旧回调的确定性处理（同一 job 恢复两次）
+    topic: null
+    skill: any
+    initial_assets: null   # 调度器层确定性测试
+    interactions: []
+    key_facts: []
+    hard_constraints:
+      - 第二次恢复为幂等空操作（状态不后退、不重复执行）
+      - 过期 Attempt 结果不得覆盖新状态
+    allowed_scope: full
+    fault_injection:
+      point: after_recovery
+      method: duplicate_recover
+    expected: {baseline: unsupported, final: deliver}
+    verifiers:
+      - double_recovery_idempotent: true
+      - stale_attempt_not_applied: true
+    budget_cny: 0

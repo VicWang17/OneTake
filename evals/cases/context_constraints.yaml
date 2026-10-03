@@ -1,0 +1,150 @@
+# 上下文与约束（cc）：明确时长、禁止元素、指定风格；多轮后关键限制仍生效
+# 多轮交互类用例当前无统一入口 → baseline 如实标 unsupported
+
+cases:
+  - case_id: cc-01
+    set: dev
+    goal: 硬时长约束贯穿全流程
+    topic: "银行卡的芯片到底在保护什么？"
+    skill: any
+    initial_assets: null
+    interactions:
+      - turn: 1
+        input: "总时长严格控制在 45 秒以内"
+    key_facts:
+      - "总时长 ≤45s"
+    hard_constraints:
+      - 成片时长 ≤45s（ffprobe 判定）
+    allowed_scope: full
+    fault_injection: null
+    expected: {baseline: unsupported, final: deliver}
+    verifiers:
+      - ffprobe_duration_max: 45
+      - files_exist: ["final/draft.mp4"]
+    budget_cny: 12
+
+  - case_id: cc-02
+    set: dev
+    goal: 禁止元素约束（不出现人物）在所有分镜生效
+    topic: "蜂蜜是怎么被蜜蜂酿造出来的？"
+    skill: knowledge_explainer_v1
+    initial_assets: null
+    interactions:
+      - turn: 1
+        input: "全程不要出现任何人物形象，只拍物件和场景"
+    key_facts:
+      - "禁止出现人物"
+    hard_constraints:
+      - 所有 visual_prompt 不含人物相关描述
+      - 抽帧 VLM 判定无人物镜头
+    allowed_scope: full
+    fault_injection: null
+    expected: {baseline: unsupported, final: deliver}
+    verifiers:
+      - visual_prompts_not_contain: [人物, 男人, 女人, 小孩, 背影, 侧脸]
+      - vlm_no_person_in_frames: true
+      - files_exist: ["final/draft.mp4"]
+    budget_cny: 13
+
+  - case_id: cc-03
+    set: dev
+    goal: 指定风格约束落进 style 与出图 prompt
+    topic: "彩虹是怎么形成的？"
+    skill: any
+    initial_assets: null
+    interactions:
+      - turn: 1
+        input: "画风用扁平插画，整体冷色调"
+    key_facts:
+      - "扁平插画风格"
+      - "冷色调"
+    hard_constraints:
+      - style_json 记录指定风格
+      - 全部 visual_prompt 携带风格锚
+    allowed_scope: full
+    fault_injection: null
+    expected: {baseline: unsupported, final: deliver}
+    verifiers:
+      - style_json_contains: [扁平插画, 冷色]
+      - visual_prompts_all_contain_style_anchor: true
+    budget_cny: 12
+
+  - case_id: cc-04
+    set: dev
+    goal: 多轮反馈后早期约束仍生效（约束保持）
+    topic: "做梦时大脑在干什么？"
+    skill: knowledge_explainer_v1
+    initial_assets: null
+    interactions:
+      - turn: 1
+        input: "禁止出现人物"
+      - turn: 2
+        input: "第 3 镜的类比换一个更生活化的例子"
+      - turn: 3
+        input: "标题改得更有悬念一点"
+    key_facts:
+      - "禁止出现人物（turn 1 提出，turn 2/3 后仍须生效）"
+    hard_constraints:
+      - turn 3 产出仍无人物
+      - turn 3 标题与 turn 1 不同且含悬念表达
+    allowed_scope: full
+    fault_injection: null
+    expected: {baseline: unsupported, final: deliver}
+    verifiers:
+      - vlm_no_person_in_frames: true
+      - title_changed_between_turns: [1, 3]
+      - constraint_traceable: "禁止出现人物"
+    budget_cny: 14
+
+  - case_id: cc-05
+    set: holdout
+    goal: 当前请求覆盖冲突的历史偏好
+    topic: "水母为什么会发光？"
+    skill: knowledge_explainer_v1
+    initial_assets: null
+    interactions:
+      - turn: 1
+        input: "这次标题不要带数字"
+    key_facts:
+      - "记忆注入偏好：标题必须带数字（预置记忆）"
+      - "当前请求：标题不要带数字（优先级更高）"
+    hard_constraints:
+      - 最终大纲标题不含数字
+      - 冲突处理有记录（非静默覆盖）
+    allowed_scope: full
+    fault_injection: null
+    expected: {baseline: unsupported, final: deliver}
+    verifiers:
+      - outline_title_not_contains_digits: true
+      - conflict_resolution_logged: true
+    budget_cny: 12
+
+  - case_id: cc-06
+    set: holdout
+    goal: 三轮反馈 + 一次摘要压缩后硬约束可准确恢复
+    topic: "闪电为什么先看到后听到？"
+    skill: knowledge_explainer_v1
+    initial_assets: null
+    interactions:
+      - turn: 1
+        input: "总时长 50 秒以内；禁止出现人物"
+      - turn: 2
+        input: "第 2 镜换一个类比"
+      - turn: 3
+        input: "BGM 换成轻快一点的"
+      - turn: 4
+        input: "<触发一次上下文摘要压缩后继续>"
+    key_facts:
+      - "总时长 ≤50s"
+      - "禁止出现人物"
+    hard_constraints:
+      - 压缩后系统能复述两条硬约束（事实覆盖）
+      - 最终成片 ≤50s 且无人物
+    allowed_scope: full
+    fault_injection: null
+    expected: {baseline: unsupported, final: deliver}
+    verifiers:
+      - constraints_recoverable_after_compaction: ["总时长 ≤50s", "禁止出现人物"]
+      - ffprobe_duration_max: 50
+      - vlm_no_person_in_frames: true
+    budget_cny: 13

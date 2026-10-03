@@ -1,0 +1,84 @@
+# 常规创作（rc）：固定选题与创作要求；分镜、媒体、字幕和最终视频可用
+# 字段语义见 README.md
+
+cases:
+  - case_id: rc-01
+    set: dev
+    goal: 科普选题一键到成片（默认线性入口，全自动）
+    topic: "为什么微波炉加热食物不均匀？"
+    skill: knowledge_explainer_v1
+    initial_assets: null
+    interactions: []
+    key_facts: []
+    hard_constraints:
+      - 总时长 50–90s
+      - 成片含硬字幕与人声音轨
+    allowed_scope: full
+    fault_injection: null
+    expected: {baseline: deliver, final: deliver}
+    verifiers:
+      - script_json_has_keys: [outline, characters, storyboard, style]
+      - files_exist: ["shots/*.png", "audio/*.mp3", "final/draft.mp4", "final/edl.json", "final/srt"]
+      - ffprobe_duration_in: [50, 90]
+      - audio_stream_present: final/draft.mp4
+      - report_generated: true
+    budget_cny: 12
+
+  - case_id: rc-02
+    set: dev
+    goal: 影视解说选题验证 Skill 选择器与结构生效
+    topic: "三分钟解说电影《千与千寻》"
+    skill: movie_commentary_v1
+    initial_assets: null
+    interactions: []
+    key_facts: []
+    hard_constraints:
+      - storyboard 结构与 movie_commentary_v1 的 structure 一致（悬念开场/剧情速览/细节分析/观点输出）
+    allowed_scope: full
+    fault_injection: null
+    expected: {baseline: deliver, final: deliver}
+    verifiers:
+      - skill_selected: movie_commentary_v1
+      - storyboard_structure_matches_skill: true
+      - files_exist: ["final/draft.mp4"]
+      - ffprobe_duration_in: [50, 90]
+    budget_cny: 12
+
+  - case_id: rc-03
+    set: dev
+    goal: 无匹配 Skill 的选题回退自决仍可交付
+    topic: "家用路由器摆放位置对网速的影响"
+    skill: none
+    initial_assets: null
+    interactions: []
+    key_facts: []
+    hard_constraints:
+      - 总时长 50–90s
+    allowed_scope: full
+    fault_injection: null
+    expected: {baseline: deliver, final: deliver}
+    verifiers:
+      - skill_selected: null
+      - files_exist: ["final/draft.mp4"]
+      - ffprobe_duration_in: [50, 90]
+    budget_cny: 12
+
+  - case_id: rc-04
+    set: holdout
+    goal: 留出集常规创作（不同题材，验证能力非过拟合开发集）
+    topic: "为什么含羞草一碰就会闭合？"
+    skill: knowledge_explainer_v1
+    initial_assets: null
+    interactions: []
+    key_facts: []
+    hard_constraints:
+      - 总时长 50–90s
+      - 成片含硬字幕与人声音轨
+    allowed_scope: full
+    fault_injection: null
+    expected: {baseline: deliver, final: deliver}
+    verifiers:
+      - script_json_has_keys: [outline, characters, storyboard, style]
+      - files_exist: ["final/draft.mp4", "final/edl.json"]
+      - ffprobe_duration_in: [50, 90]
+    budget_cny: 12

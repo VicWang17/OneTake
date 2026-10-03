@@ -1,0 +1,136 @@
+# 局部修改（le）：改单镜画面、旁白或总时长；按预先标注的依赖范围重做
+# 度量核心：无关产物重做率、过期复用数。当前无入口 → baseline 全 unsupported
+# initial_assets 为已完成项目快照（fixture 捕获是后续步骤，此处先定引用名）
+
+cases:
+  - case_id: le-01
+    set: dev
+    goal: 只改第 3 镜画面，其余已确认镜头不重做
+    topic: null
+    skill: any
+    initial_assets: fixtures/projects/le_base_microwave/   # 微波炉选题已完成快照
+    interactions:
+      - turn: 1
+        input: "第 3 镜画面改成炉内食物转盘的特写"
+    key_facts: []
+    hard_constraints:
+      - 除第 3 镜外的图片/视频/TTS 产物全部复用（内容哈希不变）
+      - 第 3 镜下游（分段合成、字幕对齐、成片）按依赖重做
+    allowed_scope: {shots: [3], fields: [visual_prompt]}
+    fault_injection: null
+    expected: {baseline: unsupported, final: deliver}
+    verifiers:
+      - artifacts_unchanged_hash: {except_shots: [3]}
+      - regenerated_only: {shots: [3]}
+      - final_video_updated: true
+    budget_cny: 4
+
+  - case_id: le-02
+    set: dev
+    goal: 改第 5 镜旁白，时长变化正确传导到音频/字幕/EDL
+    topic: null
+    skill: any
+    initial_assets: fixtures/projects/le_base_microwave/
+    interactions:
+      - turn: 1
+        input: "第 5 镜旁白改成：‘转盘的作用就是让食物轮流经过热点。’"
+    key_facts: []
+    hard_constraints:
+      - 仅第 5 镜 TTS 重新生成
+      - 该镜时长按新音频实测值回写，EDL 后续镜头时间轴整体平移
+      - 图片与视频镜头不重做（画面内容未变）
+      - 字幕与配音逐字一致
+    allowed_scope: {shots: [5], fields: [narration]}
+    fault_injection: null
+    expected: {baseline: unsupported, final: deliver}
+    verifiers:
+      - artifacts_unchanged_hash: {except_shots: [5], except_kinds: [tts, subtitle, edl, final]}
+      - shot_duration_equals_audio: 5
+      - srt_matches_narration: 5
+    budget_cny: 3
+
+  - case_id: le-03
+    set: dev
+    goal: 总时长 60s → 45s，系统给出范围正确的重做计划
+    topic: null
+    skill: any
+    initial_assets: fixtures/projects/le_base_microwave/
+    interactions:
+      - turn: 1
+        input: "整条视频压缩到 45 秒以内"
+    key_facts:
+      - "新总时长 ≤45s"
+    hard_constraints:
+      - 执行前产出计划：标明哪些镜头删除/重剪、哪些复用
+      - 未受影响镜头不重新调用任何付费 API
+      - 成片 ≤45s
+    allowed_scope: full
+    fault_injection: null
+    expected: {baseline: unsupported, final: deliver}
+    verifiers:
+      - plan_produced_before_execution: true
+      - ffprobe_duration_max: 45
+      - spend_delta_max: 2.0
+    budget_cny: 5
+
+  - case_id: le-04
+    set: dev
+    goal: 修改标题与钩子，影响范围限于大纲层 + 第 1 镜
+    topic: null
+    skill: any
+    initial_assets: fixtures/projects/le_base_microwave/
+    interactions:
+      - turn: 1
+        input: "标题太平了，换一个更有冲突感的，开场钩子也对应改"
+    key_facts: []
+    hard_constraints:
+      - 第 2 镜及之后的分镜/媒体产物全部复用
+      - 标题与第 1 镜旁白变化一致
+    allowed_scope: {fields: [title], shots: [1]}
+    fault_injection: null
+    expected: {baseline: unsupported, final: deliver}
+    verifiers:
+      - artifacts_unchanged_hash: {except_shots: [1]}
+      - title_changed: true
+    budget_cny: 3
+
+  - case_id: le-05
+    set: holdout
+    goal: 留出集单镜画面修改（不同源 fixture）
+    topic: null
+    skill: any
+    initial_assets: fixtures/projects/le_base_beehive/   # 蜂巢选题快照
+    interactions:
+      - turn: 1
+        input: "第 7 镜改成蜂箱内部的俯拍视角"
+    key_facts: []
+    hard_constraints:
+      - 除第 7 镜外产物全部复用
+    allowed_scope: {shots: [7], fields: [visual_prompt]}
+    fault_injection: null
+    expected: {baseline: unsupported, final: deliver}
+    verifiers:
+      - artifacts_unchanged_hash: {except_shots: [7]}
+      - regenerated_only: {shots: [7]}
+    budget_cny: 4
+
+  - case_id: le-06
+    set: holdout
+    goal: 组合修改（旁白 + 单镜画面同轮提出）依赖范围取并集
+    topic: null
+    skill: any
+    initial_assets: fixtures/projects/le_base_beehive/
+    interactions:
+      - turn: 1
+        input: "第 2 镜旁白缩短一半，第 4 镜画面换成更亮的场景"
+    key_facts: []
+    hard_constraints:
+      - 重做范围 = {2 的音频链路} ∪ {4 的画面链路}，其余复用
+      - 时长变化正确传导
+    allowed_scope: {shots: [2, 4]}
+    fault_injection: null
+    expected: {baseline: unsupported, final: deliver}
+    verifiers:
+      - regenerated_only: {shots: [2, 4]}
+      - shot_duration_equals_audio: 2
+    budget_cny: 5
