@@ -28,30 +28,32 @@ def run(
     topic: str = typer.Option(None, "--topic", help="选题（P2 端到端管线）"),
     pid: str = typer.Option(None, "--pid", help="断点续跑已有项目"),
     auto: bool = typer.Option(False, "--auto", help="跳过两处人工确认，全自动"),
-    graph: bool = typer.Option(False, "--graph", help="P3 图版编排（LangGraph + checkpointer）"),
+    linear: bool = typer.Option(False, "--linear", help="线性编排（P2 旧主路径，保留作回归基线）"),
     skill: str = typer.Option(None, "--skill", help="强制指定 Skill（默认 LLM 选择器自动匹配）"),
     video_shots: int = typer.Option(0, "--video-shots",
                                     help="P0 管线专用：前 N 个镜头用真实视频生成"),
 ):
-    """一条命令出片：--topic 选题端到端（推荐）；--script 固定文案（P0 路径）；--pid 续跑。"""
+    """一条命令出片：--topic 选题端到端（推荐）；--script 固定文案（P0 路径）；--pid 续跑。
+
+    2026-10-03 起主入口为图版（LangGraph + checkpointer，P0 决策）；--linear 回退线性版。"""
     if topic or pid:
-        if graph:
-            result = graph_mod.run_graph(topic=topic, pid=pid, auto=auto,
-                                         on_interrupt=_cli_interrupt)
-            if result.get("aborted"):
-                typer.echo("已中止。")
-                return
-            if result.get("error"):
-                typer.echo(f"中断：{result['error']}")
-                raise typer.Exit(code=1)
-            typer.echo(f"\n完成（图版）：{result['draft']}\n"
-                       f"  时长 {result['duration']:.1f}s · "
-                       f"耗时 {result['minutes']:.1f} 分钟 · 成本 ¥{result['cost']:.2f}")
+        if linear:
+            result = endtoend.run_topic(topic, auto=auto, pid=pid, skill=skill)
+            typer.echo(f"\n完成（线性）：{result['draft']}\n"
+                       f"  时长 {result['duration']:.1f}s · 耗时 {result['minutes']:.1f} 分钟 · "
+                       f"成本 ¥{result['cost']:.2f}")
             return
-        result = endtoend.run_topic(topic, auto=auto, pid=pid, skill=skill)
+        result = graph_mod.run_graph(topic=topic, pid=pid, auto=auto, skill=skill,
+                                     on_interrupt=_cli_interrupt)
+        if result.get("aborted"):
+            typer.echo("已中止。")
+            return
+        if result.get("error"):
+            typer.echo(f"中断：{result['error']}")
+            raise typer.Exit(code=1)
         typer.echo(f"\n完成：{result['draft']}\n"
-                   f"  时长 {result['duration']:.1f}s · 耗时 {result['minutes']:.1f} 分钟 · "
-                   f"成本 ¥{result['cost']:.2f}")
+                   f"  时长 {result['duration']:.1f}s · "
+                   f"耗时 {result['minutes']:.1f} 分钟 · 成本 ¥{result['cost']:.2f}")
         return
     if script:
         result = linear.run(script, n_video_shots=video_shots)

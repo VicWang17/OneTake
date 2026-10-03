@@ -14,6 +14,7 @@ class PipelineState(TypedDict, total=False):
     topic: str                  # 选题（新运行）
     pid: str                    # 项目 ID = 图恢复的 thread_id
     auto: bool                  # 跳过人确认
+    skill: str | None           # 强制指定 Skill（None 时选择器按选题自动匹配）
 
     # 各节点产出
     outline: dict               # 大纲（含 style）

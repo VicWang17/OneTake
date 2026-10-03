@@ -35,13 +35,20 @@ def _load_script(pid: str) -> dict:
 
 
 def n_storyboard(state: PipelineState) -> dict:
-    """大纲 + 分镜表 + 角色锚点（已有 script.json 则直接装载——续跑入口）。"""
+    """大纲 + 分镜表 + 角色锚点（已有 script.json 则直接装载——续跑入口）。
+    新运行时 Skill 语义与线性入口一致：state.skill 优先，否则选择器按选题匹配。"""
     pid = state["pid"]
     script_path = PROJECTS_DIR / pid / "script.json"
     if script_path.exists():
         s = _load_script(pid)
     else:
-        r = sb.create_storyboard(topic=state["topic"], pid=pid)
+        skill = state.get("skill")
+        if not skill:
+            from skills import selector
+            choice = selector.choose_skill(state["topic"], project_id=pid)
+            skill = choice["skill"]
+            print(f"  Skill 选择：{skill or '无匹配（LLM 自决风格）'}——{choice['reason']}")
+        sb.create_storyboard(topic=state["topic"], pid=pid, skill_name=skill)
         s = _load_script(pid)
     return {"outline": s["outline"], "shots": s["shots"],
             "character_sheet": s.get("character_sheet", "")}
@@ -139,7 +146,8 @@ def build_graph(saver) -> object:
 # ---------- 驱动（CLI 调用） ----------
 
 def run_graph(topic: str | None = None, pid: str | None = None,
-              auto: bool = False, on_interrupt=None) -> dict:
+              auto: bool = False, skill: str | None = None,
+              on_interrupt=None) -> dict:
     """图版端到端。on_interrupt(payload) -> resume 值，由 CLI 负责人工交互。"""
     PROJECTS_DIR.mkdir(exist_ok=True)
     conn = sqlite3.connect(str(CHECKPOINT_DB), check_same_thread=False)
@@ -153,7 +161,8 @@ def run_graph(topic: str | None = None, pid: str | None = None,
     config = {"configurable": {"thread_id": pid}}
     has_checkpoint = saver.get_tuple(config) is not None
 
-    inputs = None if has_checkpoint else {"topic": topic, "pid": pid, "auto": auto}
+    inputs = None if has_checkpoint else {"topic": topic, "pid": pid,
+                                          "auto": auto, "skill": skill}
     t0 = time.time()
     while True:
         result = graph.invoke(inputs, config)
