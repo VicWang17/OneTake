@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     type         TEXT NOT NULL,              -- video_gen / batch_render / aggregate ...
     payload_json TEXT NOT NULL,
     priority     INTEGER NOT NULL DEFAULT 100,  -- 数值越小越先调度
-    status       TEXT NOT NULL DEFAULT 'pending', -- pending/running/succeeded/failed/dead
+    status       TEXT NOT NULL DEFAULT 'pending', -- pending/running/succeeded/failed/dead/unknown(结果未知待对账)
     retry_count  INTEGER NOT NULL DEFAULT 0,
     max_retries  INTEGER NOT NULL DEFAULT 3,
     run_at       TEXT,

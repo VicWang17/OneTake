@@ -232,3 +232,11 @@
 - **验证**：`evals/runners/judge_cases.py` 两用例全绿（重试后通过→引用已切换且候选不残留；三连败→旧版字节不变 + v2/v3 证据保留 + 标记人工介入），假 VLM/假视频生成 monkeypatch，零 API 成本
 - **过程中的坑**：运行器 monkeypatch `dao.get_conn` 后没恢复现场，第二个用例拿到第一个用例已关闭的连接（`Cannot operate on a closed database`）——**monkeypatch 必须配对恢复（try/finally），且建库要用补丁前保存的原始函数引用**
 - **经验**：① 「先写后换 + 原子 rename」是文件系统上实现事务语义的通用手法（os.replace 同分区原子），比「先删再写」安全一个量级；② 失败证据也是资产——vN 候选文件留着，复盘时能看到模型究竟错在哪；③ 该缺陷属"演练过但没实战触发"（DEVLOG 023 的遗憾）类型：重生成回路真实低分未出现过，确定性运行器补上了这个验证缺口
+
+### 031 「结果未知」显式化：recover_orphans 从一刀切回滚到分类处置
+
+- **背景**：P0「区分未提交、已受理、执行中、成功、失败和结果未知」。旧 `recover_orphans` 把崩溃 worker 的 running 任务一律回滚 pending——已提交供应商的任务（payload 有 task_id）实质是「结果未知」，和普通未提交任务混在一起，从状态上完全看不出它握着一笔可能已成交的供应商任务
+- **修复**：recover_orphans 分类——有 task_id → `unknown`（新状态，TEXT 列免迁移）；无 task_id → pending。worker 启动时 `reconcile_unknown` 对账回 pending，handler 凭 `resume_task_id` 先查供应商再决定续查/重提。schema.sql 注释同步状态词汇
+- **验证**：fr-03 用例五检查全绿（受理任务进 unknown / 对账回 pending / task_id 保留 / handler 以 resume_task_id 续查非重提 / 最终成功）；fr-05/08 与其他运行器回归全绿
+- **已知限制（计划允许保留）**：worker 崩溃恰好发生在「供应商已受理但 task_id 回调未落库」的窗口内时，任务无 task_id 会被当作未提交重跑——这个窗口在本层无法消除，已写入 queue.py 模块 docstring
+- **经验**：① 状态机的状态词汇就是系统的诚实度——「unknown」不是装饰，它让「这笔钱到底扣没扣」从隐式猜测变成显式可查；② 对账（reconcile）思想来自支付系统：任何涉及外部侧effects的操作，恢复时第一动作永远是「查对方账本」而不是「重做」；③ 恢复路径的分类依据（task_id 有无）必须由「提交即回写」保证（DEVLOG 021b 的 on_task_created 设计在此兑现价值）——前置设计的回报往往在后续阶段才显现

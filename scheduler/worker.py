@@ -91,12 +91,16 @@ def _concurrency_of(provider: str) -> int:
 
 
 def run_workers(stop_when_empty: bool = True) -> None:
-    """启动 worker 池（含孤儿任务回收）。stop_when_empty：队列清空即退出（CLI 批处理模式）。"""
+    """启动 worker 池（含孤儿回收 + 结果未知对账）。stop_when_empty：队列清空即退出（CLI 批处理模式）。"""
     worker_id = f"w-{uuid.uuid4().hex[:8]}"
     conn = dao.get_conn()
     n_orphans = queue.recover_orphans(conn, worker_id)
     if n_orphans:
-        print(f"    [worker] 回收上任遗留 running 任务 {n_orphans} 个（回滚为 pending）")
+        print(f"    [worker] 回收上任遗留 running 任务 {n_orphans} 个")
+    reconciled = queue.reconcile_unknown(conn)
+    if reconciled:
+        print(f"    [worker] 对账 {len(reconciled)} 个结果未知任务"
+              f"（凭 task_id 续查供应商状态，不重复提交）")
     conn.close()
 
     async def _main():

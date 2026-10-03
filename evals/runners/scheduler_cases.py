@@ -1,8 +1,9 @@
-"""调度器层确定性用例运行器：fr-05（崩溃孤儿回收）、fr-08（重复恢复幂等 + 过期 Attempt）。
+"""调度器层确定性用例运行器：fr-03（供应商受理后中断对账）、fr-05（崩溃孤儿回收）、
+fr-08（重复恢复幂等 + 过期 Attempt）。
 
 零 API 成本：独立临时 SQLite + 直接驱动 scheduler/queue 状态机，不起 worker、不调厂商。
 用法：uv run python evals/runners/scheduler_cases.py
-产出：evals/reports/scheduler_baseline_<date>.json
+产出：evals/reports/scheduler_<sha8>_<date>.json
 """
 
 import json
@@ -16,7 +17,8 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 from db import dao  # noqa: E402
-from scheduler import queue  # noqa: E402
+from gateway import core as gw  # noqa: E402
+from scheduler import handlers, queue  # noqa: E402
 
 
 def _git_sha() -> str:
@@ -83,11 +85,54 @@ def run_fr08(conn) -> dict:
             "verdict": "pass" if all(ok for _, ok in checks) else "fail"}
 
 
+def run_fr03(conn) -> dict:
+    """fr-03：视频任务供应商已受理、本地未记账时中断 → unknown → 对账 → 凭 task_id 续查。"""
+    checks = []
+    jid = queue.enqueue(conn, "video_gen", {
+        "pid": "p", "idx": 1, "motion_prompt": "镜头推近",
+        "out_path": "/tmp/fr03.mp4", "model": "fake-model",
+        "seconds": 5, "resolution": "480p", "first_frame_url": None,
+    })
+    queue.claim(conn, "w-dead")
+    queue.update_payload(conn, jid, {"task_id": "vt-123"})  # 供应商已受理（on_task_created 回写）
+
+    # 崩溃 → 恢复：已受理任务必须进 unknown（结果未知），不能当普通 pending 直接重跑
+    queue.recover_orphans(conn, "w-live")
+    checks.append(("accepted_job_marked_unknown", _job(conn, jid)["status"] == "unknown"))
+
+    # 对账：回 pending 且 task_id 保留
+    queue.reconcile_unknown(conn)
+    row = _job(conn, jid)
+    checks.append(("reconciled_to_pending", row["status"] == "pending"))
+    checks.append(("task_id_preserved",
+                   json.loads(row["payload_json"])["task_id"] == "vt-123"))
+
+    # 重跑：handler 必须把 task_id 作为 resume_task_id 传给网关（先查后定，不重复提交）
+    captured = {}
+    real_call = gw.call
+
+    def fake_call(task_type, payload, tier="draft", project_id=None):  # noqa: ARG001
+        captured.update(payload)
+        return {"file_path": payload["out_path"], "cost": 0.0, "model": "fake"}
+    gw.call = fake_call
+    try:
+        job = queue.claim(conn, "w-live")
+        handlers.handle_video_gen(conn, jid, json.loads(job["payload_json"]))
+        queue.complete(conn, jid, "w-live")
+    finally:
+        gw.call = real_call
+    checks.append(("resumed_not_resubmitted", captured.get("resume_task_id") == "vt-123"))
+    checks.append(("succeeded", _job(conn, jid)["status"] == "succeeded"))
+
+    return {"case_id": "fr-03", "checks": checks,
+            "verdict": "pass" if all(ok for _, ok in checks) else "fail"}
+
+
 def main() -> None:
     results = []
     with tempfile.TemporaryDirectory() as tmp:
         conn = dao.get_conn(Path(tmp) / "test.db")
-        for case_fn in (run_fr05, run_fr08):
+        for case_fn in (run_fr03, run_fr05, run_fr08):
             conn.execute("DELETE FROM jobs")
             conn.commit()
             results.append(case_fn(conn))

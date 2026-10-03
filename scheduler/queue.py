@@ -3,7 +3,12 @@
 状态机：pending → running → succeeded
                   running →（失败，retry_count+1）→ pending（run_at 退避）
                   running →（超过 max_retries）→ dead（死信，可人工 retry）
-worker 崩溃恢复：启动时 recover_orphans 把"running 但 worker 已死"的任务回滚 pending。
+worker 崩溃恢复：启动时 recover_orphans 回收"running 但 worker 已死"的任务——
+已提交供应商（payload 有 task_id）→ unknown（结果未知），由 reconcile_unknown
+对账后回 pending，handler 凭 task_id 先查供应商状态再决定续查/重提（不重复扣费）；
+未提交 → 直接回滚 pending。
+已知限制：worker 崩溃发生在「供应商已受理但 task_id 回调未落库」的窗口内时，
+任务无 task_id 会被当作未提交重跑，存在重复提交风险——该窗口无法在本层消除。
 """
 
 import json
@@ -92,12 +97,32 @@ def update_payload(conn: sqlite3.Connection, job_id: str, patch: dict) -> None:
 
 
 def recover_orphans(conn: sqlite3.Connection, live_worker_id: str) -> int:
-    """worker 启动时调用：把不属于本进程的 running 任务回滚为 pending（崩溃回收）。"""
-    cur = conn.execute(
-        "UPDATE jobs SET status = 'pending', worker_id = NULL"
-        " WHERE status = 'running' AND worker_id != ?", (live_worker_id,))
+    """worker 启动时调用：回收不属于本进程的 running 任务。
+
+    已提交供应商（payload 有 task_id）→ unknown（结果未知，待对账）；
+    未提交 → 回滚 pending 直接重跑。返回回收任务数。
+    """
+    rows = conn.execute(
+        "SELECT id, payload_json FROM jobs WHERE status = 'running' AND worker_id != ?",
+        (live_worker_id,)).fetchall()
+    for r in rows:
+        task_id = json.loads(r["payload_json"]).get("task_id")
+        new_status = "unknown" if task_id else "pending"
+        conn.execute("UPDATE jobs SET status = ?, worker_id = NULL WHERE id = ?",
+                     (new_status, r["id"]))
     conn.commit()
-    return cur.rowcount
+    return len(rows)
+
+
+def reconcile_unknown(conn: sqlite3.Connection) -> list[str]:
+    """对账（P0）：unknown 任务凭 task_id 回 pending——handler 恢复时先查供应商
+    状态再决定续查下载还是重新提交（resume_task_id 路径，不重复扣费）。
+    返回对账的任务 id 列表。"""
+    rows = conn.execute("SELECT id FROM jobs WHERE status = 'unknown'").fetchall()
+    for r in rows:
+        conn.execute("UPDATE jobs SET status = 'pending' WHERE id = ?", (r["id"],))
+    conn.commit()
+    return [r["id"] for r in rows]
 
 
 def list_jobs(conn: sqlite3.Connection, status: str | None = None) -> list[sqlite3.Row]:
