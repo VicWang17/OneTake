@@ -217,3 +217,10 @@
 - **修复**：`queue.complete()`/`fail()` 的 UPDATE 增加 `WHERE status='running' AND worker_id=?` 双守卫，worker 传入自己的 worker_id；回写被拒（过期 Attempt）时记 `job_done_rejected`/`job_fail_rejected` WARN 日志而非静默
 - **验证**：fr-08 `stale_attempt_not_applied` 转绿，fr-05 保持绿；两份报告按 `scheduler_<sha8>_<date>.json` 命名各自留存（基线 2244ae9 全绿前 vs 修复后 c410130 之后）——顺手修了运行器「同日覆盖基线报告」的命名缺陷
 - **经验**：① 「守卫式 UPDATE」（条件更新 + rowcount 判生效）是 SQLite 单库并发下最便宜的乐观锁——claim 防双领用的就是它（DEVLOG 021b），这次是把同一思想补到回写路径；② 评测报告文件名必须含代码版本标识，否则「基线」会被后续运行悄悄覆盖——可对照性从文件命名开始；③ 状态机写路径的守卫要成对审计：claim 有守卫、complete/fail 没有，说明当初只防了「领」没防「回」——同类代码路径的防护要一次查全
+
+### 029 产物失效判断：从「文件在就复用」到三重校验
+
+- **背景**：P0「以输入和依赖有效性决定复用」。旧逻辑 `videos.py` 里 `if out.exists(): continue`——分镜图重画后若没走 `regenerate_images`（它顺手删旧 clip），旧视频会被错误复用；截断损坏的 clip 也照样当好的用（fr-04 场景）
+- **修复**：`_clip_valid()` 三重校验——① 文件存在且非空；② ffprobe 可读（截断/损坏现形）；③ 输入指纹（`gw.idem_key_for`，含首帧图 base64 内容 + motion_prompt + 参数）在 generations 表有成功记录。任一不满足即失效重做。网关 `_idem_key` 提公开包装 `idem_key_for` 供管线侧复算指纹
+- **验证**：`evals/runners/artifact_cases.py` 四用例全绿（正常复用/输入变更失效/截断检出/缺失重做），临时库 + 本地 ffmpeg 占位 mp4，零 API 成本
+- **经验**：① 缓存的正确性边界在「跳过逻辑」——网关内容寻址早就做对了失效（指纹变→miss→重生成），但管线层的存在性捷径绕开了它，等于在缓存前面开了个不校验的后门。**捷径必须与主路径同一套有效性判据**；② 失效判断的信息源要尽量复用已有事实（generations 表的成功记录就是天然的产物血缘），而不是新建一套元数据——表结构零改动；③ 损坏检测用 ffprobe 读时长而不是仅看文件大小——截断文件 size>0 也照样是坏的

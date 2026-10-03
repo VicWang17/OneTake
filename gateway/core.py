@@ -66,6 +66,11 @@ def _idem_key(task_type: str, model: str, payload: dict, tier: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+def idem_key_for(task_type: str, model: str, payload: dict, tier: str = "draft") -> str:
+    """对外暴露内容指纹（产物复用判定用，如 pipeline/videos.py 的失效检查）。"""
+    return _idem_key(task_type, model, payload, tier)
+
+
 def _try_cache(conn, idem_key: str, out_path: str | None, project_id: str | None):
     """命中且产物完好则返回缓存结果；否则 None。命中留痕 cache_hit（cost=0）。"""
     row = dao.find_generation_by_idem(conn, idem_key)

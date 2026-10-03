@@ -11,12 +11,30 @@ import time
 from pathlib import Path
 
 from db import dao
+from editing import ffmpeg
 from gateway import adapters
+from gateway import core as gw
 from nodes import motion as motion_node
 from scheduler import handlers, queue, worker  # noqa: F401（handlers 注册用）
 
 ROOT = Path(__file__).resolve().parent.parent
 PROJECTS_DIR = ROOT / "projects"
+
+
+def _clip_valid(conn, out: Path, payload: dict, model: str) -> bool:
+    """复用判定（P0 失效检查）：存在且非空 + ffprobe 完好 + 输入指纹有成功生成记录。
+
+    三者缺一即失效重做：缺失/空文件、截断损坏（fr-04）、上游输入变化
+    （分镜图重画/motion_prompt 变更 → 指纹变化 → 无匹配记录）。
+    """
+    if not out.exists() or out.stat().st_size == 0:
+        return False
+    try:
+        ffmpeg.probe_duration(out)  # 截断/损坏文件在此现形
+    except Exception:
+        return False
+    key = gw.idem_key_for("video", model, payload)
+    return dao.find_generation_by_idem(conn, key) is not None
 
 
 def _data_url(img: Path) -> str:
@@ -43,20 +61,28 @@ def batch_generate_videos(pid: str, only_shots: list[int] | None = None,
         if only_shots and idx not in only_shots:
             continue
         out = clips_dir / f"shot_{idx:02d}_src.mp4"
-        if out.exists():  # 产物在 = 该镜头无需排队（缓存语义的最短路径）
-            continue
         img = pdir / "shots" / f"shot_{idx:02d}.png"
         if not img.exists():
             raise FileNotFoundError(f"缺分镜图: {img}（先跑 images --pid {pid}）")
         if not s.get("motion_prompt"):  # 缓存：重跑不重复付 LLM 费
             s["motion_prompt"] = motion_node.generate_motion_prompt(s, pid)
-        job_id = queue.enqueue(conn, "video_gen", {
+        payload = {
             "pid": pid, "idx": idx,
             "motion_prompt": s["motion_prompt"],
             "out_path": str(out),
             "first_frame_url": _data_url(img),
             "model": model, "seconds": 5, "resolution": "480p",
-        })
+        }
+        video_payload = {  # 与 handler 调网关时同形的语义参数（pid/idx 不参与）
+            "prompt": payload["motion_prompt"], "out_path": payload["out_path"],
+            "model": model, "seconds": 5, "resolution": "480p",
+            "first_frame_url": payload["first_frame_url"],
+        }
+        if _clip_valid(conn, out, video_payload, model):  # 产物有效才跳过（P0 失效判断）
+            continue
+        if out.exists():
+            out.unlink()  # 失效产物让位，防 handler 写文件时与旧内容混淆
+        job_id = queue.enqueue(conn, "video_gen", payload)
         job_shot[job_id] = idx
 
     script_path.write_text(json.dumps(script, ensure_ascii=False, indent=2),
