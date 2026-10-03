@@ -19,6 +19,7 @@ from db import dao
 from editing import edl as edl_mod
 from editing import ffmpeg
 from observability import logging as olog
+from pipeline import brief as brief_mod
 from pipeline import storyboard as sb
 from pipeline import videos as videos_mod
 from pipeline.state import PipelineState
@@ -48,7 +49,8 @@ def n_storyboard(state: PipelineState) -> dict:
             choice = selector.choose_skill(state["topic"], project_id=pid)
             skill = choice["skill"]
             print(f"  Skill 选择：{skill or '无匹配（LLM 自决风格）'}——{choice['reason']}")
-        sb.create_storyboard(topic=state["topic"], pid=pid, skill_name=skill)
+        sb.create_storyboard(topic=state["topic"], pid=pid, skill_name=skill,
+                             brief=brief_mod.load_brief(pid))
         s = _load_script(pid)
     return {"outline": s["outline"], "shots": s["shots"],
             "character_sheet": s.get("character_sheet", "")}
@@ -147,14 +149,28 @@ def build_graph(saver) -> object:
 
 def run_graph(topic: str | None = None, pid: str | None = None,
               auto: bool = False, skill: str | None = None,
+              constraints: dict | None = None,
               on_interrupt=None) -> dict:
-    """图版端到端。on_interrupt(payload) -> resume 值，由 CLI 负责人工交互。"""
+    """图版端到端。on_interrupt(payload) -> resume 值，由 CLI 负责人工交互。
+    constraints：P1 用户硬约束（duration/style/forbid），新运行时落 brief.json。"""
     PROJECTS_DIR.mkdir(exist_ok=True)
     conn = sqlite3.connect(str(CHECKPOINT_DB), check_same_thread=False)
     saver = SqliteSaver(conn)
     graph = build_graph(saver)
 
     pid = pid or time.strftime("p%Y%m%d-%H%M%S")
+    if constraints and not (PROJECTS_DIR / pid / "script.json").exists():
+        from pipeline import brief as _b
+        br = _b.new_brief()
+        if constraints.get("duration"):
+            _b.set_constraint(br, "duration", constraints["duration"], "user_current",
+                              note="CLI --duration")
+        if constraints.get("style"):
+            _b.set_constraint(br, "style", constraints["style"], "user_current",
+                              note="CLI --style")
+        for item in constraints.get("forbid", []):
+            _b.add_list_constraint(br, "forbidden", item, "user_current")
+        _b.save_brief(pid, br)
     olog.set_trace(pid)
     olog.set_node("graph")
     olog.log("run_start", mode="resume" if pid else "new", engine="graph")

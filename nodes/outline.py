@@ -46,12 +46,14 @@ REQUIRED_KEYS = {"title", "logline", "audience", "target_duration", "structure",
 
 
 def generate_outline(topic: str, project_id: str, feedback: str | None = None,
-                     skill: dict | None = None, memory_block: str = "") -> dict:
+                     skill: dict | None = None, memory_block: str = "",
+                     brief_block: str = "") -> dict:
     """选题 → 大纲 dict（经网关计费）。校验缺字段即抛错（重试在调用方）。
     feedback：脚本确认节点打回时的修改意见，注入 prompt 重新生成。
     skill：选中的 Skill（P6）——结构与风格由 YAML 给定，不再 LLM 自决。
-    memory_block：P6 记忆注入段（偏好与经验，一次注入全程生效）。"""
-    user = f"选题：{topic}"
+    memory_block：P6 记忆注入段（偏好与经验，一次注入全程生效）。
+    brief_block：P1 CreativeBrief 约束段（用户硬约束，紧跟选题表最高优先级）。"""
+    user = f"选题：{topic}" + brief_block
     if skill:
         d = skill["data"]
         user += (f"\n\n创作方法论（Skill「{skill['name']}」，必须遵循）："

@@ -30,6 +30,9 @@ def run(
     auto: bool = typer.Option(False, "--auto", help="跳过两处人工确认，全自动"),
     linear: bool = typer.Option(False, "--linear", help="线性编排（P2 旧主路径，保留作回归基线）"),
     skill: str = typer.Option(None, "--skill", help="强制指定 Skill（默认 LLM 选择器自动匹配）"),
+    duration: int = typer.Option(None, "--duration", help="硬约束：目标时长上限（秒）"),
+    style: str = typer.Option(None, "--style", help="硬约束：指定风格（如「扁平插画，冷色调」）"),
+    forbid: str = typer.Option(None, "--forbid", help="硬约束：禁止内容，逗号分隔（如「人物,文字」）"),
     video_shots: int = typer.Option(0, "--video-shots",
                                     help="P0 管线专用：前 N 个镜头用真实视频生成"),
 ):
@@ -43,7 +46,11 @@ def run(
                        f"  时长 {result['duration']:.1f}s · 耗时 {result['minutes']:.1f} 分钟 · "
                        f"成本 ¥{result['cost']:.2f}")
             return
+        constraints = {"duration": duration, "style": style,
+                       "forbid": [x.strip() for x in forbid.split(",") if x.strip()]
+                       if forbid else []}
         result = graph_mod.run_graph(topic=topic, pid=pid, auto=auto, skill=skill,
+                                     constraints=constraints,
                                      on_interrupt=_cli_interrupt)
         if result.get("aborted"):
             typer.echo("已中止。")

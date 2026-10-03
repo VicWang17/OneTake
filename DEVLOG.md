@@ -263,3 +263,10 @@
 - **关键设计**：① 冲突不是「调一个置信度数字」而是「高优先级覆盖 + 完整留痕」——被拒绝的写入也记录（rejected_lower_priority），事后可审计「谁想改什么、为什么没改成」；② 槽位约束（duration/style 单值）与清单约束（required/forbidden 多值）分开处理，清单按值去重并升级来源；③ brief 是文档型数据存文件不入 DB——与 script.json 同级，避免为查询模式不存在的数据建表
 - **验证**：`brief_cases.py` 五用例（当前请求覆盖记忆/低优先级被拒/同级后者胜/清单去重/持久化往返）全绿
 - **经验**：① 「优先级 + 留痕」优于「置信度衰减」——前者行为可解释可回放，后者是黑盒数值魔法；② 约束系统的测试本质是「策略矩阵」：3 级来源 × 覆盖/被拒/同级，矩阵列全了逻辑才闭环；③ 本步只是载体，下一步接入分镜/出图 prompt 后才产生真实约束力——载体先行、接线随后，每步可独立验收
+
+### 035 brief 注入链路：约束从「存档」变成「生效」+ 回归抓到的签名漂移
+
+- **落地**：三个注入点——① 大纲：`generate_outline` 新增 brief_block，紧跟选题（最高优先级位），`create_outline`/`create_storyboard` 穿线（brief 为 None 且有 pid 时自动读 brief.json，多轮约束保持）；② 出图：`build_image_prompt` 追加负面约束「画面严格避免：…」；③ CLI：`--duration/--style/--forbid` → run_graph 落 brief.json（source=user_current）
+- **验证**：`inject_cases.py` 四用例（约束块内容/出图负面约束/大纲穿线/brief.json 自动加载）全绿 + 全量 19 用例回归
+- **回归抓虫**：graph_cases 的 fake_create 没跟 `create_storyboard` 的新签名加 brief 参数，全量回归立刻暴露——**改公共函数签名后必须跑全量用例，mock 也是调用方**
+- **经验**：① 注入位置就是优先级声明：brief_block 放「选题之后、Skill/记忆之前」，用物理位置表达「用户硬约束 > Skill 方法论 > 历史记忆」；② 出图的禁止约束用自然语言负面表达（「严格避免」）而非参数——文生图模型没有标准 negative prompt 字段，约束只能编进正文；③ 顺路发现 `create_outline` 里有一段 return 后的死代码（早期遗留），未顺手删——与本步无关，记入 backlog 待清理

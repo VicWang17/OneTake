@@ -17,6 +17,7 @@ from gateway import core as gw
 from nodes import character as character_node
 from nodes import outline as outline_node
 from nodes import storyboard as storyboard_node
+from pipeline import brief as brief_mod
 from skills import loader
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -31,9 +32,11 @@ def _download(url: str, out: Path) -> None:
 
 
 def create_outline(topic: str, feedback: str | None = None,
-                   pid: str | None = None, skill_name: str | None = None) -> dict:
+                   pid: str | None = None, skill_name: str | None = None,
+                   brief: dict | None = None) -> dict:
     """1.1 大纲生成：建项目 → LLM 大纲 → script.json + 风格入库。
-    skill_name 指定 Skill（P6）；None 时由调用方决定是否走选择器。"""
+    skill_name 指定 Skill（P6）；None 时由调用方决定是否走选择器。
+    brief：P1 CreativeBrief——硬约束注入大纲 prompt（最高优先级段）。"""
     pid = pid or time.strftime("p%Y%m%d-%H%M%S") + f"-{uuid.uuid4().hex[:4]}"
     pdir = PROJECTS_DIR / pid
     pdir.mkdir(parents=True, exist_ok=True)
@@ -49,7 +52,8 @@ def create_outline(topic: str, feedback: str | None = None,
                        skill_id=skill["id"] if skill else None)
 
     data = outline_node.generate_outline(topic, pid, feedback=feedback, skill=skill,
-                                         memory_block=memory_block)
+                                         memory_block=memory_block,
+                                         brief_block=brief_mod.prompt_block(brief))
     (pdir / "script.json").write_text(
         json.dumps({"topic": topic, "outline": data,
                     "skill": skill_name}, ensure_ascii=False, indent=2),
@@ -69,17 +73,22 @@ def create_outline(topic: str, feedback: str | None = None,
 
 def create_storyboard(topic: str | None = None, pid: str | None = None,
                       feedback: str | None = None,
-                      skill_name: str | None = None) -> dict:
+                      skill_name: str | None = None,
+                      brief: dict | None = None) -> dict:
     """1.2 分镜表：读大纲（已有 pid 或现场生成）→ LLM 分镜表（校验回灌）→ 落盘 + 入库。
     pid + feedback：脚本确认打回——删除旧分镜，带意见全量重生成（大纲/分镜/锚点）。
-    skill_name：P6 指定 Skill（None 时由端到端编排层先走选择器）。"""
+    skill_name：P6 指定 Skill（None 时由端到端编排层先走选择器）。
+    brief：P1 CreativeBrief；None 且已有项目时自动读 brief.json（多轮约束保持）。"""
     conn = dao.get_conn()
+    if brief is None and pid:
+        brief = brief_mod.load_brief(pid)
     if pid and feedback:
         script_path = PROJECTS_DIR / pid / "script.json"
         script = json.loads(script_path.read_text(encoding="utf-8"))
         topic = script["topic"]
         dao.delete_shots(conn, pid)
-        outline_data = outline_node.generate_outline(topic, pid, feedback=feedback)
+        outline_data = outline_node.generate_outline(
+            topic, pid, feedback=feedback, brief_block=brief_mod.prompt_block(brief))
         script = {"topic": topic, "outline": outline_data}
     elif pid:
         script_path = PROJECTS_DIR / pid / "script.json"
@@ -87,7 +96,7 @@ def create_storyboard(topic: str | None = None, pid: str | None = None,
         outline_data = script["outline"]
     else:
         result = create_outline(topic, feedback=feedback, pid=pid,
-                                skill_name=skill_name)
+                                skill_name=skill_name, brief=brief)
         pid, outline_data = result["pid"], result["outline"]
         script_path = PROJECTS_DIR / pid / "script.json"
         script = json.loads(script_path.read_text(encoding="utf-8"))
@@ -109,11 +118,12 @@ def create_storyboard(topic: str | None = None, pid: str | None = None,
     return {"pid": pid, "shots": shots, **anchors}
 
 
-def build_image_prompt(script: dict, shot: dict) -> str:
+def build_image_prompt(script: dict, shot: dict, brief: dict | None = None) -> str:
     """出图 prompt 构造（唯一注入点，DEVLOG 016 修复）。
 
     规则：风格锚恒注入；角色锚仅在 shot.has_character=True 时注入。
     老包兼容：无拆分锚点字段时，旧 character_sheet 整体恒注入（行为同修复前）。
+    brief：P1 禁止内容以负面约束追加（「画面严格避免：…」）。
     """
     style = script.get("style_anchor", "")
     char = script.get("character_anchor", "")
@@ -125,6 +135,9 @@ def build_image_prompt(script: dict, shot: dict) -> str:
     if not style and not char and script.get("character_sheet"):
         parts.append(script["character_sheet"])
     parts.append(shot["visual_prompt"])
+    forbidden = brief_mod.hard_constraints(brief)["forbidden"] if brief else []
+    if forbidden:
+        parts.append("画面严格避免：" + "、".join(forbidden))
     return "，".join(parts)
 
 
@@ -142,12 +155,13 @@ def create_images(pid: str) -> dict:
     shots_dir.mkdir(exist_ok=True)
 
     conn = dao.get_conn()
+    brief = brief_mod.load_brief(pid)  # P1：禁止内容等约束进出图 prompt
     first_img = shots_dir / "shot_01.png"
     made, hits, cost = 0, 0, 0.0
     for s in script["shots"]:
         idx = int(s["idx"])
         img = shots_dir / f"shot_{idx:02d}.png"
-        prompt = build_image_prompt(script, s)
+        prompt = build_image_prompt(script, s, brief)
         payload: dict = {"prompt": prompt, "out_path": str(img)}
         if idx > 1 and first_img.exists():  # 参考图链：本地首图 base64（内容寻址稳定）
             payload["reference_url"] = _data_url(first_img)
@@ -179,10 +193,11 @@ def regenerate_images(pid: str, feedback_map: dict[int, str]) -> dict:
     shots = {int(s["idx"]): s for s in script["shots"]}
 
     conn = dao.get_conn()
+    brief = brief_mod.load_brief(pid)
     cost = 0.0
     for idx, fb in sorted(feedback_map.items()):
         s = shots[idx]
-        prompt = build_image_prompt(script, s)
+        prompt = build_image_prompt(script, s, brief)
         if fb:
             prompt += f"。修改意见（请采纳）：{fb}"
         r = gw.call("image", {"prompt": prompt}, project_id=pid)

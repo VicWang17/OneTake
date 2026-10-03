@@ -38,7 +38,8 @@ def run_cases() -> list[dict]:
 
         calls = {}
 
-        def fake_create(topic=None, pid=None, feedback=None, skill_name=None):  # noqa: A002
+        def fake_create(topic=None, pid=None, feedback=None, skill_name=None,
+                        brief=None):  # noqa: A002
             calls["create"] = {"topic": topic, "pid": pid, "skill_name": skill_name}
             (Path(tmp_s) / pid / "script.json").write_text(
                 json.dumps(_SCRIPT, ensure_ascii=False), encoding="utf-8")

@@ -116,3 +116,22 @@ def hard_constraints(brief: CreativeBrief) -> dict:
         "required": [c["value"] for c in brief.get("required", [])],
         "forbidden": [c["value"] for c in brief.get("forbidden", [])],
     }
+
+
+def prompt_block(brief: CreativeBrief | None) -> str:
+    """约束注入文本（大纲/分镜 prompt 用，置于选题之后表最高优先级）。空 brief 返回空串。"""
+    if not brief:
+        return ""
+    hard = hard_constraints(brief)
+    lines = []
+    if hard["duration"]:
+        lines.append(f"目标时长：{hard['duration']} 秒（硬指标，全片不得超过）")
+    if hard["style"]:
+        lines.append(f"指定风格：{hard['style']}")
+    if hard["required"]:
+        lines.append(f"必须包含：{'；'.join(hard['required'])}")
+    if hard["forbidden"]:
+        lines.append(f"严格禁止：{'；'.join(hard['forbidden'])}")
+    if not lines:
+        return ""
+    return "\n\n创作约束（最高优先级，必须全部满足）：\n" + "\n".join(lines)
