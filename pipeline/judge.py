@@ -11,6 +11,8 @@ from db import dao
 from datapipe import events
 from gateway import core as gw
 from nodes import judge
+from pipeline import brief as brief_mod
+from pipeline import context as context_mod
 
 ROOT = Path(__file__).resolve().parent.parent
 PROJECTS_DIR = ROOT / "projects"
@@ -57,9 +59,17 @@ def judge_project(pid: str) -> dict:
             print(f"    shot {idx:02d} 不合格（语义 {r['semantic']} 质量 {r['quality']}："
                   f"{issue[:40]}），第 {attempts} 次重生成…")
             candidate = _next_version_path(pdir, idx)
+            regen_prompt = (s.get("motion_prompt", s["visual_prompt"])
+                            + f"。避免以下问题：{issue}")
+            # 修复阶段 ContextPack：运动提示词 + 上轮失败原因 + brief 约束，落盘可审计
+            context_mod.save_pack(
+                pid, "repair",
+                context_mod.build_repair(
+                    pid, motion_prompt=s.get("motion_prompt", s["visual_prompt"]),
+                    issue=issue, brief=brief_mod.load_brief(pid)),
+                name=f"shot{idx:02d}")
             gw.call("video", {
-                "prompt": s.get("motion_prompt", s["visual_prompt"])
-                          + f"。避免以下问题：{issue}",
+                "prompt": regen_prompt,
                 "out_path": str(candidate),
                 "model": "doubao-seedance-2-0-fast-260128",
                 "seconds": 5, "resolution": "480p",

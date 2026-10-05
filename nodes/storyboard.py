@@ -90,11 +90,14 @@ def validate(text: str, target_duration: int) -> tuple[dict | None, list[str]]:
     return (data, errors) if not errors else (None, errors)
 
 
-def generate_storyboard(outline: dict, project_id: str) -> list[dict]:
-    """大纲 → 分镜列表。校验失败时把错误清单回灌给 LLM 自修（≤3 次）。"""
+def generate_storyboard(outline: dict, project_id: str,
+                        user_override: str | None = None) -> list[dict]:
+    """大纲 → 分镜列表。校验失败时把错误清单回灌给 LLM 自修（≤3 次）。
+    user_override：Context Builder 组装好的 user（含 brief 约束段），缺省用大纲直拼。"""
     messages = [
         {"role": "system", "content": SHOTS_SYSTEM},
-        {"role": "user", "content": f"视频大纲：\n{json.dumps(outline, ensure_ascii=False)}"},
+        {"role": "user", "content": user_override or
+         f"视频大纲：\n{json.dumps(outline, ensure_ascii=False)}"},
     ]
     target = int(outline.get("target_duration") or 60)
     last_errors: list[str] = []

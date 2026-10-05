@@ -85,6 +85,62 @@ def run_cases() -> list[dict]:
         ("no_full_text_on_disk", all("text" not in s for s in record["sections"])),
     ]})
 
+    # 5. 分镜阶段：brief 约束 + 大纲双分节
+    pack_sb = ctx.build_storyboard({"title": "t", "target_duration": 45}, "pctx",
+                                   brief=_make_brief())
+    results.append({"case_id": "ctx-storyboard", "checks": [
+        ("brief_and_outline_sections",
+         [s["name"] for s in pack_sb["sections"]] == ["brief", "outline"]),
+        ("both_in_user",
+         "45 秒" in pack_sb["user"] and "视频大纲" in pack_sb["user"]),
+    ]})
+
+    # 6. 单镜阶段：锚点/画面/禁止三分节审计
+    script = {"style_anchor": "扁平插画", "character_anchor": "月牙"}
+    shot = {"idx": 1, "visual_prompt": "微波炉特写", "has_character": True}
+    pack_si = ctx.build_shot_image(script, shot, _make_brief(),
+                                   "扁平插画，月牙，微波炉特写，画面严格避免：出现人物",
+                                   "pctx")
+    results.append({"case_id": "ctx-shot-image", "checks": [
+        ("sections_complete",
+         [s["name"] for s in pack_si["sections"]]
+         == ["style_anchor", "character_anchor", "visual_prompt", "forbidden"]),
+        ("no_character_drops_anchor",
+         [s["name"] for s in ctx.build_shot_image(
+             script, {**shot, "has_character": False}, None, "p", "pctx")["sections"]]
+         == ["style_anchor", "visual_prompt"]),
+    ]})
+
+    # 7. 修复阶段：运动提示词 + 上轮问题分节
+    pack_rp = ctx.build_repair("pctx", motion_prompt="镜头推近", issue="画面崩坏",
+                               brief=_make_brief())
+    results.append({"case_id": "ctx-repair", "checks": [
+        ("issue_section", any(s["name"] == "issue" and "画面崩坏" in s["text"]
+                              for s in pack_rp["sections"])),
+        ("brief_section", any(s["name"] == "brief" for s in pack_rp["sections"])),
+    ]})
+
+    # 8. 超长分节外置：>2000 字符的记忆块 → 引用摘要 + 落盘文件
+    with tempfile.TemporaryDirectory() as tmp_s:
+        old_root = ctx.PROJECTS_DIR
+        ctx.PROJECTS_DIR = Path(tmp_s)
+        try:
+            huge = "\n\n[记忆] " + "很长的记忆内容" * 300
+            pack_big = ctx.build_outline("测试选题", "pctx", memory_block=huge)
+            mem_sec = next(s for s in pack_big["sections"] if s["name"] == "memory")
+            ref_file = Path(mem_sec.get("externalized", ""))
+            checks = [
+                ("section_externalized", bool(mem_sec.get("externalized"))),
+                ("summary_line_compact",
+                 len(mem_sec["text"]) < 300 and "外置" in mem_sec["text"]
+                 and "读取方式" in mem_sec["text"]),
+                ("file_complete", ref_file.exists()
+                 and len(ref_file.read_text(encoding="utf-8")) > 2000),
+            ]
+        finally:
+            ctx.PROJECTS_DIR = old_root
+    results.append({"case_id": "ctx-externalize", "checks": checks})
+
     return results
 
 

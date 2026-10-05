@@ -21,6 +21,8 @@ from datapipe import events  # noqa: E402
 from editing.ffmpeg import FFMPEG  # noqa: E402
 from gateway import core as gw  # noqa: E402
 from nodes import judge as nj  # noqa: E402
+from pipeline import brief as bj  # noqa: E402
+from pipeline import context as cj  # noqa: E402
 from pipeline import judge as pj  # noqa: E402
 
 PID = "pjudge"
@@ -79,7 +81,8 @@ def run_case(name: str, judge_results: list[bool]) -> dict:
     with tempfile.TemporaryDirectory() as tmp_s:
         tmp = Path(tmp_s)
         old_project_root = pj.PROJECTS_DIR
-        pj.PROJECTS_DIR = tmp
+        old_brief_root, old_ctx_root = bj.PROJECTS_DIR, cj.PROJECTS_DIR
+        pj.PROJECTS_DIR = bj.PROJECTS_DIR = cj.PROJECTS_DIR = tmp
         try:
             pdir, original = _setup(tmp, judge_results)
             original_bytes = original.read_bytes()
@@ -87,6 +90,8 @@ def run_case(name: str, judge_results: list[bool]) -> dict:
             report = json.loads((pdir / "final" / "quality.json").read_text(encoding="utf-8"))
         finally:  # 恢复全部 monkeypatch，防泄漏到下一个用例
             pj.PROJECTS_DIR = old_project_root
+            bj.PROJECTS_DIR = old_brief_root
+            cj.PROJECTS_DIR = old_ctx_root
             nj.judge_shot = _REAL_JUDGE_SHOT
             gw.call = _REAL_GW_CALL
             events.emit = _REAL_EMIT

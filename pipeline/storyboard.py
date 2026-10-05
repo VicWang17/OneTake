@@ -109,7 +109,11 @@ def create_storyboard(topic: str | None = None, pid: str | None = None,
         script_path = PROJECTS_DIR / pid / "script.json"
         script = json.loads(script_path.read_text(encoding="utf-8"))
 
-    shots = storyboard_node.generate_storyboard(outline_data, pid)
+    # 分镜阶段同样走 Context Builder（brief 时长/禁止约束进分镜 prompt）
+    pack = context_mod.build_storyboard(outline_data, pid, brief=brief)
+    context_mod.save_pack(pid, "storyboard", pack)
+    shots = storyboard_node.generate_storyboard(outline_data, pid,
+                                                user_override=pack["user"])
     for s in shots:
         dao.create_shot(conn, project_id=pid, idx=s["idx"], duration=s["duration"],
                         visual_prompt=s["visual_prompt"], narration=s["narration"],
@@ -170,6 +174,10 @@ def create_images(pid: str) -> dict:
         idx = int(s["idx"])
         img = shots_dir / f"shot_{idx:02d}.png"
         prompt = build_image_prompt(script, s, brief)
+        # 单镜生成阶段：出图 prompt 组成审计（这张图为什么长这样）
+        context_mod.save_pack(pid, "shot_image",
+                              context_mod.build_shot_image(script, s, brief, prompt, pid),
+                              name=f"shot{idx:02d}")
         payload: dict = {"prompt": prompt, "out_path": str(img)}
         if idx > 1 and first_img.exists():  # 参考图链：本地首图 base64（内容寻址稳定）
             payload["reference_url"] = _data_url(first_img)

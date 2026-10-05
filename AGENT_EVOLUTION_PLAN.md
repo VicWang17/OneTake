@@ -81,18 +81,18 @@
 
 阶段验收 ✅：确定性故障集（fr-03/04/05/08、instance-mutex、artifact/judge 用例）全部通过——无错误缓存复用、受理任务凭 task_id 续查不重复提交、结果未知进入对账。「供应商已受理但 task_id 回调未落库」窗口保留为已知限制（queue.py docstring）。注：按 2026-10-03 范围决策，本阶段无真实 API 验收。
 
-### P1 上下文理解与任务约束
+### P1 上下文理解与任务约束 ✅ 完成（2026-10-05，确定性层验收）
 
-- [ ] 定义 CreativeBrief：受众、目的、时长、风格、必需内容、禁止内容、预算和验收条件。
-- [ ] Context Builder 按策划、分镜、单镜生成和修复阶段选择信息，并记录来源、版本、范围和 Token 消耗。
-- [ ] 优先级明确为当前用户要求、已确认项目约束、适用历史偏好；临时选择不自动升级为长期偏好。
-- [ ] 关键约束作为结构化状态保存，摘要包含事实、未解决问题、决策依据和产物引用。
-- [ ] 对记忆加入来源、作用域和替代关系；冲突时不只调整一个置信度数值。
-- [ ] 超长工具结果外置为文件引用，摘要保留错误、状态、关键数字和后续读取方式。
+- [x] 定义 CreativeBrief：受众、目的、时长、风格、必需内容、禁止内容、预算和验收条件。——`pipeline/brief.py`，`projects/{pid}/brief.json` 持久化（DEVLOG 034）
+- [x] Context Builder 按策划、分镜、单镜生成和修复阶段选择信息，并记录来源、版本、范围和 Token 消耗。——`pipeline/context.py` 四阶段 build_*，ContextPack 落 `context/<stage>.json`（DEVLOG 036/039）
+- [x] 优先级明确为当前用户要求、已确认项目约束、适用历史偏好；临时选择不自动升级为长期偏好。——brief 三级 PRIORITY + changelog 留痕；user_current 不回写 memories（DEVLOG 034）
+- [x] 关键约束作为结构化状态保存，摘要包含事实、未解决问题、决策依据和产物引用。——`pipeline/compact.py` 四段 schema；硬约束压缩免疫（DEVLOG 038）
+- [x] 对记忆加入来源、作用域和替代关系；冲突时不只调整一个置信度数值。——memories 加 scope/source/superseded_by（DEVLOG 037）
+- [x] 超长工具结果外置为文件引用，摘要保留错误、状态、关键数字和后续读取方式。——`pipeline/refs.py`，Context Builder 分节超限自动外置（DEVLOG 039）
 
-主要位置：`pipeline/state.py`、`pipeline/storyboard.py`、`memory/`、`skills/`；新增 Context Builder 的具体位置沿用项目模块风格。
+主要位置：`pipeline/brief.py`、`pipeline/context.py`、`pipeline/compact.py`、`pipeline/refs.py`、`memory/`、`nodes/outline.py`、`nodes/storyboard.py`。
 
-阶段验收：三轮反馈与一次摘要压缩后，硬约束仍可准确恢复；当前反馈能够覆盖旧偏好，原始证据可追溯。
+阶段验收 ✅：compact_cases 复现「三轮反馈 + 一次压缩」后硬约束准确恢复；brief_cases 验证当前反馈覆盖旧偏好且 changelog 留痕可追溯；memory/contradict 显式替代。注：按 2026-10-03 范围决策，无真实 API 验收；自然语言约束解析（「不要人物」→ brief）当前由 CLI 参数承载，自然语言入口留待 P2/P3 的多轮修改场景一并做。
 
 ### P2 多步骤任务规划
 
