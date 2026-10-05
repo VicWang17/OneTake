@@ -16,11 +16,13 @@ PICK_SYSTEM = """你是记忆检索员。用户给一个视频选题和候选记
 
 
 def get_relevant(topic: str, k: int = 3, project_id: str | None = None) -> list[dict]:
-    """选题 → Top-K 相关记忆（置信度 ≥ 注入阈值，按置信度排序）。"""
-    candidates = store.list_all(min_confidence=store.CONF_INJECT_MIN)
+    """选题 → Top-K 相关记忆（置信度 ≥ 注入阈值，未被替代，按置信度排序）。
+    P1 作用域：全局记忆 + 本项目记忆；其他项目的 project 作用域记忆不注入。"""
+    scopes = ["global"] + ([f"project:{project_id}"] if project_id else [])
+    candidates = store.list_all(min_confidence=store.CONF_INJECT_MIN, scopes=scopes)
     if not candidates:
         return []
-    catalog = "\n".join(f'[{m["id"]}]（{m["type"]}，置信度 {m["confidence"]:.2f}）'
+    catalog = "\n".join(f'[{m["id"]}]（{m["type"]}/{m["scope"]}，置信度 {m["confidence"]:.2f}）'
                         f'{m["content"]}' for m in candidates)
     r = gw.call("llm", {
         "system": PICK_SYSTEM,

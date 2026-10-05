@@ -40,6 +40,13 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "result_json" not in gcols:
         conn.execute("ALTER TABLE generations ADD COLUMN result_json TEXT")
         conn.commit()
+    mcols = {r["name"] for r in conn.execute("PRAGMA table_info(memories)")}
+    for col, ddl in (("scope", "TEXT NOT NULL DEFAULT 'global'"),
+                     ("source", "TEXT NOT NULL DEFAULT 'manual'"),
+                     ("superseded_by", "TEXT")):
+        if col not in mcols:  # P1 记忆升级：作用域/来源/替代关系
+            conn.execute(f"ALTER TABLE memories ADD COLUMN {col} {ddl}")
+    conn.commit()
 
 
 def _has_tables(conn: sqlite3.Connection) -> bool:

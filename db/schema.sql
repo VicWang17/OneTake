@@ -91,5 +91,8 @@ CREATE TABLE IF NOT EXISTS memories (
     type       TEXT NOT NULL,                -- profile / episode
     content    TEXT NOT NULL,
     confidence REAL NOT NULL DEFAULT 0.5,
+    scope      TEXT NOT NULL DEFAULT 'global',   -- global / project:<pid>（P1 作用域）
+    source     TEXT NOT NULL DEFAULT 'manual',   -- manual / extracted / confirmed（P1 来源）
+    superseded_by TEXT,                          -- 被哪条替代（P1 替代关系，非空即不再注入）
     updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );

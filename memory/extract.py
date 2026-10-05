@@ -37,4 +37,5 @@ def extract_from_failures(project_id: str | None = None) -> list[dict]:
         "user": f"失败记录：\n{catalog}",
     }, project_id=project_id)
     lessons = r["data"].get("lessons", [])
-    return [store.add("episode", lesson, project_id) for lesson in lessons]
+    return [store.add("episode", lesson, project_id, source="extracted")
+            for lesson in lessons]

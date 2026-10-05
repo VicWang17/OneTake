@@ -1,0 +1,72 @@
+{
+  "runner": "evals/runners/context_cases.py",
+  "git_sha": "2ee635bb8ce806782222f80634822a6e62400cfc",
+  "run_at": "2026-10-05 18:00:44",
+  "layer": "deterministic (pure assembly, no api)",
+  "results": [
+    {
+      "case_id": "ctx-section-order",
+      "checks": [
+        {
+          "check": "order_is_priority",
+          "ok": true
+        },
+        {
+          "check": "all_sections_in_user",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "ctx-provenance",
+      "checks": [
+        {
+          "check": "brief_source_version",
+          "ok": true
+        },
+        {
+          "check": "skill_version",
+          "ok": true
+        },
+        {
+          "check": "feedback_marked_current",
+          "ok": true
+        },
+        {
+          "check": "tokens_est_positive",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "ctx-minimal",
+      "checks": [
+        {
+          "check": "topic_only",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "ctx-save-pack",
+      "checks": [
+        {
+          "check": "record_has_sections",
+          "ok": true
+        },
+        {
+          "check": "record_has_tokens",
+          "ok": true
+        },
+        {
+          "check": "no_full_text_on_disk",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    }
+  ]
+}

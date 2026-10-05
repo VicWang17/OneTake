@@ -1,0 +1,104 @@
+{
+  "runner": "evals/runners/scheduler_cases.py",
+  "git_sha": "2ee635bb8ce806782222f80634822a6e62400cfc",
+  "run_at": "2026-10-05 18:00:40",
+  "layer": "deterministic (temp sqlite, no api)",
+  "results": [
+    {
+      "case_id": "fr-03",
+      "checks": [
+        {
+          "check": "accepted_job_marked_unknown",
+          "ok": true
+        },
+        {
+          "check": "reconciled_to_pending",
+          "ok": true
+        },
+        {
+          "check": "task_id_preserved",
+          "ok": true
+        },
+        {
+          "check": "resumed_not_resubmitted",
+          "ok": true
+        },
+        {
+          "check": "succeeded",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "fr-05",
+      "checks": [
+        {
+          "check": "claimed_by_dead_worker",
+          "ok": true
+        },
+        {
+          "check": "stuck_running",
+          "ok": true
+        },
+        {
+          "check": "orphans_recovered",
+          "ok": true
+        },
+        {
+          "check": "rolled_back_pending",
+          "ok": true
+        },
+        {
+          "check": "reclaimed",
+          "ok": true
+        },
+        {
+          "check": "succeeded",
+          "ok": true
+        },
+        {
+          "check": "no_running_left",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "fr-08",
+      "checks": [
+        {
+          "check": "first_recovery_rollback",
+          "ok": true
+        },
+        {
+          "check": "double_recovery_idempotent",
+          "ok": true
+        },
+        {
+          "check": "stale_attempt_not_applied",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "instance-mutex",
+      "checks": [
+        {
+          "check": "second_instance_rejected",
+          "ok": true
+        },
+        {
+          "check": "stale_lock_reclaimed",
+          "ok": true
+        },
+        {
+          "check": "lock_released",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    }
+  ]
+}

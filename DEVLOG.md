@@ -279,3 +279,10 @@
 - **关键设计**：分节顺序即优先级声明（topic → brief → skill → feedback → memory）；`generate_outline` 加 `user_override` 逃生门，builder 组装好的完整 user 直接注入，旧的逐段拼接保留为线性基线路径
 - **验证**：`context_cases.py` 四用例（分节顺序/来源版本/最小输入/落盘审计）+ inject 用例适配新穿线后全绿，全量 26 用例回归通过
 - **经验**：① 「上下文工程」的第一性原理是**可追溯**——模型行为怪异时，先问「它当时看到了什么」，没有组成记录就只能猜；② 分节带版本（brief v3 / skill 1.0.0）让「同选题两次生成结果不同」可归因——是约束变了还是方法论变了；③ 落盘不含全文只留分节名/来源/估算：审计够用的同时控制体积，全文可由来源重建；④ Token 估算不必精确——它的用途是预算护栏与趋势对比，粗估的相对值就够决策
+
+### 037 记忆升级：contradict 从「扣置信度」到「显式替代关系」
+
+- **背景**：P1「记忆加入来源、作用域和替代关系；冲突时不只调整一个置信度数值」。旧实现 contradict 只做 `confidence -0.2`——低于阈值「可能不注入」，为什么这条记忆失效、被谁取代，完全不可查
+- **升级**：memories 表加三列（`scope` 作用域 global/project:<pid>、`source` 来源 manual/extracted/confirmed、`superseded_by` 替代指向）；contradict 时旧条 `superseded_by=新条id`，注入候选直接排除（`superseded_by IS NULL`）；`get_relevant` 按作用域过滤（全局 + 本项目，他项目记忆不污染）；`extract` 来源标 extracted；dao._migrate 轻量迁移补列
+- **验证**：`memory_cases.py` 四用例（scope/source 持久化 / 替代关系与排除 / 作用域过滤 / 旧库迁移默认值）全绿，全量 30 用例回归通过
+- **经验**：① 「显式关系 > 隐式数值」与 brief 的优先级留痕是同一思想——系统里凡是有「覆盖/失效」语义的地方，都应该能回答「被谁、什么时候、为什么」；② 作用域的最小可用模型是「global / project:<pid>」两档——genre 级作用域看着美但需要题材分类器支撑，没有可靠分类就是伪功能，留给将来；③ 旧数据迁移用「加列带默认值」而非「重建表」——SQLite ALTER 低成本，老记忆自动获得 global/manual 身份，语义自然正确（它们确实来自手动添加）
