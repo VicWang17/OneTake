@@ -1,0 +1,48 @@
+{
+  "runner": "evals/runners/artifact_cases.py",
+  "git_sha": "c77f94a868d05fa6b9c1f84ee5da342a369004c8",
+  "run_at": "2026-10-03 19:39:42",
+  "layer": "deterministic (temp sqlite + local ffmpeg, no api)",
+  "results": [
+    {
+      "case_id": "fr-artifact-reuse",
+      "checks": [
+        {
+          "check": "valid_reuse",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "fr-artifact-stale-input",
+      "checks": [
+        {
+          "check": "stale_input_invalidated",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "fr-04",
+      "checks": [
+        {
+          "check": "corrupted_detected",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "fr-artifact-missing",
+      "checks": [
+        {
+          "check": "missing_invalid",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    }
+  ]
+}

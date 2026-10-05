@@ -68,8 +68,8 @@ def run_cases() -> list[dict]:
         captured = {}
 
         def fake_gen(topic, project_id, feedback=None, skill=None,
-                     memory_block="", brief_block=""):
-            captured["brief_block"] = brief_block
+                     memory_block="", brief_block="", user_override=None):
+            captured["user"] = user_override or ""
             return {"title": "t", "logline": "l", "audience": "a",
                     "target_duration": 45, "structure": [{"part": "钩子", "summary": "s"}],
                     "style": {"tone": "t", "visual": "v", "voice": "v"}}
@@ -84,9 +84,9 @@ def run_cases() -> list[dict]:
             dao.get_conn = _REAL_GET_CONN
             outline_node.generate_outline = _REAL_GEN_OUTLINE
     results.append({"case_id": "inject-outline-threading", "checks": [
-        ("brief_block_reaches_outline", "45 秒" in captured.get("brief_block", "")),
-        ("constraint_position_first",
-         captured.get("brief_block", "").startswith("\n\n创作约束")),
+        ("constraints_reach_outline", "45 秒" in captured.get("user", "")),
+        ("constraint_right_after_topic",
+         captured.get("user", "").startswith("选题：测试选题\n\n创作约束")),
     ]})
 
     # 4. create_storyboard 自动读 brief.json（多轮约束保持，无需显式传参）
@@ -102,8 +102,8 @@ def run_cases() -> list[dict]:
         captured = {}
 
         def fake_gen2(topic, project_id, feedback=None, skill=None,
-                      memory_block="", brief_block=""):
-            captured["brief_block"] = brief_block
+                      memory_block="", brief_block="", user_override=None):
+            captured["user"] = user_override or ""
             return {"title": "t", "logline": "l", "audience": "a", "target_duration": 45,
                     "structure": [{"part": "钩子", "summary": "s"}],
                     "style": {"tone": "t", "visual": "v", "voice": "v"}}
@@ -124,7 +124,7 @@ def run_cases() -> list[dict]:
             sb_node.generate_storyboard = real_sb
             char_node.generate_character_sheet = real_char
     results.append({"case_id": "inject-brief-auto-load", "checks": [
-        ("brief_json_auto_loaded", "出现人物" in captured.get("brief_block", "")),
+        ("brief_json_auto_loaded", "出现人物" in captured.get("user", "")),
     ]})
 
     return results

@@ -270,3 +270,12 @@
 - **验证**：`inject_cases.py` 四用例（约束块内容/出图负面约束/大纲穿线/brief.json 自动加载）全绿 + 全量 19 用例回归
 - **回归抓虫**：graph_cases 的 fake_create 没跟 `create_storyboard` 的新签名加 brief 参数，全量回归立刻暴露——**改公共函数签名后必须跑全量用例，mock 也是调用方**
 - **经验**：① 注入位置就是优先级声明：brief_block 放「选题之后、Skill/记忆之前」，用物理位置表达「用户硬约束 > Skill 方法论 > 历史记忆」；② 出图的禁止约束用自然语言负面表达（「严格避免」）而非参数——文生图模型没有标准 negative prompt 字段，约束只能编进正文；③ 顺路发现 `create_outline` 里有一段 return 后的死代码（早期遗留），未顺手删——与本步无关，记入 backlog 待清理
+
+## 2026-10-05 · P1 续
+
+### 036 Context Builder：上下文从「拼字符串」到「可追溯的 ContextPack」
+
+- **落地**：`pipeline/context.py`——按阶段组装上下文为 ContextPack（user 文本 + sections 分节清单），每节带来源/版本/Token 估算（中文约 2 字符 ≈ 1 token 粗估）；组成记录落盘 `projects/{pid}/context/<stage>.json`（不含全文，防膨胀）。第一版接入策划阶段（大纲新建 + 打回重生成两条路径都走 builder）
+- **关键设计**：分节顺序即优先级声明（topic → brief → skill → feedback → memory）；`generate_outline` 加 `user_override` 逃生门，builder 组装好的完整 user 直接注入，旧的逐段拼接保留为线性基线路径
+- **验证**：`context_cases.py` 四用例（分节顺序/来源版本/最小输入/落盘审计）+ inject 用例适配新穿线后全绿，全量 26 用例回归通过
+- **经验**：① 「上下文工程」的第一性原理是**可追溯**——模型行为怪异时，先问「它当时看到了什么」，没有组成记录就只能猜；② 分节带版本（brief v3 / skill 1.0.0）让「同选题两次生成结果不同」可归因——是约束变了还是方法论变了；③ 落盘不含全文只留分节名/来源/估算：审计够用的同时控制体积，全文可由来源重建；④ Token 估算不必精确——它的用途是预算护栏与趋势对比，粗估的相对值就够决策

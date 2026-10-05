@@ -18,6 +18,7 @@ from nodes import character as character_node
 from nodes import outline as outline_node
 from nodes import storyboard as storyboard_node
 from pipeline import brief as brief_mod
+from pipeline import context as context_mod
 from skills import loader
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -51,9 +52,13 @@ def create_outline(topic: str, feedback: str | None = None,
     dao.create_project(conn, topic=topic, pid=pid,
                        skill_id=skill["id"] if skill else None)
 
-    data = outline_node.generate_outline(topic, pid, feedback=feedback, skill=skill,
-                                         memory_block=memory_block,
-                                         brief_block=brief_mod.prompt_block(brief))
+    # P1 Context Builder：组装策划阶段上下文（分节带来源/版本/Token 估算），落盘可审计
+    pack = context_mod.build_outline(topic, pid, brief=brief, skill=skill,
+                                     memory_block=memory_block, feedback=feedback)
+    context_mod.save_pack(pid, "outline", pack)
+
+    data = outline_node.generate_outline(topic, pid, skill=skill,
+                                         user_override=pack["user"])
     (pdir / "script.json").write_text(
         json.dumps({"topic": topic, "outline": data,
                     "skill": skill_name}, ensure_ascii=False, indent=2),
@@ -87,8 +92,11 @@ def create_storyboard(topic: str | None = None, pid: str | None = None,
         script = json.loads(script_path.read_text(encoding="utf-8"))
         topic = script["topic"]
         dao.delete_shots(conn, pid)
-        outline_data = outline_node.generate_outline(
-            topic, pid, feedback=feedback, brief_block=brief_mod.prompt_block(brief))
+        # 打回重生成同样走 Context Builder（feedback 作为「当前请求」分节入包）
+        pack = context_mod.build_outline(topic, pid, brief=brief, feedback=feedback)
+        context_mod.save_pack(pid, "outline", pack)
+        outline_data = outline_node.generate_outline(topic, pid,
+                                                     user_override=pack["user"])
         script = {"topic": topic, "outline": outline_data}
     elif pid:
         script_path = PROJECTS_DIR / pid / "script.json"
