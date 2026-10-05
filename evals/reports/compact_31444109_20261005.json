@@ -1,0 +1,66 @@
+{
+  "runner": "evals/runners/compact_cases.py",
+  "git_sha": "314441091bf3e9a8ee9fa534b2bc5f414f700f66",
+  "run_at": "2026-10-05 18:11:34",
+  "layer": "deterministic (monkeypatched llm, temp dirs, no api)",
+  "results": [
+    {
+      "case_id": "compact-constraints-survive",
+      "checks": [
+        {
+          "check": "duration_survives",
+          "ok": true
+        },
+        {
+          "check": "forbidden_survives",
+          "ok": true
+        },
+        {
+          "check": "schema_complete",
+          "ok": true
+        },
+        {
+          "check": "llm_facts_merged",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "compact-incremental",
+      "checks": [
+        {
+          "check": "covered_count_grows",
+          "ok": true
+        },
+        {
+          "check": "new_interactions_visible",
+          "ok": true
+        },
+        {
+          "check": "no_pending_returns_none",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "compact-recovery-context",
+      "checks": [
+        {
+          "check": "hard_constraints_present",
+          "ok": true
+        },
+        {
+          "check": "summary_present",
+          "ok": true
+        },
+        {
+          "check": "new_turn_visible",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    }
+  ]
+}

@@ -20,6 +20,7 @@ from editing import edl as edl_mod
 from editing import ffmpeg
 from observability import logging as olog
 from pipeline import brief as brief_mod
+from pipeline import compact as compact_mod
 from pipeline import storyboard as sb
 from pipeline import videos as videos_mod
 from pipeline.state import PipelineState
@@ -61,6 +62,9 @@ def n_confirm_script(state: PipelineState) -> dict:
     if state.get("auto"):
         return {}
     decision = interrupt({"kind": "confirm_script", "pid": state["pid"]})
+    compact_mod.log_interaction(state["pid"], "confirm_script",
+                                json.dumps(decision, ensure_ascii=False)
+                                if not isinstance(decision, str) else decision)
     if decision == "n":
         return {"aborted": True}
     if isinstance(decision, dict) and decision.get("feedback"):  # r：带意见重生成
@@ -80,6 +84,9 @@ def n_confirm_images(state: PipelineState) -> dict:
     if state.get("auto"):
         return {}
     decision = interrupt({"kind": "confirm_images", "pid": state["pid"]})
+    compact_mod.log_interaction(state["pid"], "confirm_images",
+                                json.dumps(decision, ensure_ascii=False)
+                                if not isinstance(decision, str) else decision)
     if decision == "n":
         return {"aborted": True}
     if isinstance(decision, dict) and decision.get("redo"):

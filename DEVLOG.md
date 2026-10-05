@@ -286,3 +286,10 @@
 - **升级**：memories 表加三列（`scope` 作用域 global/project:<pid>、`source` 来源 manual/extracted/confirmed、`superseded_by` 替代指向）；contradict 时旧条 `superseded_by=新条id`，注入候选直接排除（`superseded_by IS NULL`）；`get_relevant` 按作用域过滤（全局 + 本项目，他项目记忆不污染）；`extract` 来源标 extracted；dao._migrate 轻量迁移补列
 - **验证**：`memory_cases.py` 四用例（scope/source 持久化 / 替代关系与排除 / 作用域过滤 / 旧库迁移默认值）全绿，全量 30 用例回归通过
 - **经验**：① 「显式关系 > 隐式数值」与 brief 的优先级留痕是同一思想——系统里凡是有「覆盖/失效」语义的地方，都应该能回答「被谁、什么时候、为什么」；② 作用域的最小可用模型是「global / project:<pid>」两档——genre 级作用域看着美但需要题材分类器支撑，没有可靠分类就是伪功能，留给将来；③ 旧数据迁移用「加列带默认值」而非「重建表」——SQLite ALTER 低成本，老记忆自动获得 global/manual 身份，语义自然正确（它们确实来自手动添加）
+
+### 038 摘要压缩：结构化状态与叙述历史的分离设计
+
+- **落地**：`pipeline/compact.py`——交互日志（interactions.jsonl，确认/反馈/打回落盘）+ LLM 压缩为 summary.json（facts/open_questions/decisions/artifact_refs 四段 schema）+ 增量压缩（covered_entries 游标）+ recovery_context（硬约束 + 摘要 + 新交互三段恢复）。图版两个确认节点接入日志
+- **核心设计**：**硬约束压缩免疫**——brief 的生效约束不经过 LLM 摘要，压缩时无条件从 brief.json 汇入 facts。LLM 摘要只处理叙述性历史（决策依据/产物引用），摘要质量波动影响不到硬约束
+- **验证**：`compact_cases.py` 三用例（cc-06 场景：三轮反馈 + 压缩 → 时长/禁止元素仍在 facts；增量压缩不重复覆盖；恢复上下文三段齐备）全绿
+- **经验**：① 对抗「摘要漂移」的根本方法不是更好的摘要 prompt，而是**让关键信息不依赖摘要**——结构化的归结构化（brief），叙述的才进压缩器；② 增量压缩用游标（covered_entries）而不是删除旧日志——日志是审计资产，删了就无法回放；③ 阈值压缩（COMPACT_THRESHOLD=10）是单机务实选择：真长上下文窗口管理是 P3 的事，本步先把「压缩 → 恢复」的数据通路打通
