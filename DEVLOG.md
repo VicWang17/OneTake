@@ -300,3 +300,11 @@
 - **四阶段补全**：`build_storyboard`（brief+大纲，分镜生成走 user_override）/ `build_shot_image`（锚点+画面+禁止的组成审计，按镜头落盘）/ `build_repair`（运动提示词+上轮问题+brief，质检重生成落盘）
 - **过程中的坑**：judge.py 接入 repair 落盘后，judge_cases 只 patch 了 `pj.PROJECTS_DIR`，context/brief 模块各有独立 PROJECTS_DIR 会写真实 projects/——**模块级常量路径的 monkeypatch 要按模块逐个打**，多模块共享配置时这是系统性风险（后续可考虑统一到单一日志根配置）
 - **经验**：① 「引用优于内联」是上下文预算管理的基本功——大结果的价值密度低，摘要行 + 文件路径的信息密度高一个量级；② ContextPack 对非 LLM 环节（出图 prompt 是确定性拼接）同样有价值——审计「这张图为什么长这样」不需要 LLM 参与；③ P1 的五个模块（brief/context/compact/refs/memory）共享同一哲学：显式结构 > 隐式数值，留痕 > 覆盖，引用 > 内联
+
+### 040 P2 结构化任务规划：计划即数据，校验先于执行
+
+- **落地**：`pipeline/plan.py`——Plan/PlanNode DAG（节点带 ID/能力/依赖/输入引用/输出契约/成功标准/验证器/超时/重试，全字段可序列化落盘 `projects/{pid}/plans/`）+ 四个构建器（plan_create / plan_shot_edit / plan_narration_edit / plan_duration_adjust）+ 静态校验器 + Kahn 分层拓扑 + 执行器。CLI `main.py plan --pid --edit "第3镜画面改成…"`，规则版自然语言意图解析（`parse_edit_request`）覆盖修改三类场景
+- **核心设计**：① **protected 清单**——局部修改计划把不受影响镜头的产物全部列入受保护，验证器拒绝任何越界覆盖，"其余镜头不变"从约定变成强制；② **执行门槛三段式**——handler 返回 → 产物落盘检查 → 验证器（exists/ffprobe）通过，三者齐备才标记 succeeded 并释放下游，失败节点的下游整支 skipped 而非带病继续；③ **时长调整先决策后执行**——plan_duration_adjust 的删镜/复用决策写在 meta 里（执行前可评审），保留镜头零付费调用（只重建 EDL + 渲染），原文备份 script.full.json 可回滚
+- **验证**：`plan_cases.py` 14 用例（新建分层与首图依赖 / le-01/02/03 范围 / 五类非法计划拒绝 / 执行器门槛与重试 / 被拒计划零调用 / 自然语言解析 / le-06 组合并集）全绿，全量 49 用例回归通过；CLI 端到端沙盘（假项目 fixture）验证三种修改场景 + 超预算拒绝
+- **过程中的坑**：① `plan_id` 用秒级时间戳，组合修改同秒建两个计划互相覆盖——加 uuid 短后缀；② duration_adjust 复用 `_shared_downstream()[1:]` 导致 edl 节点依赖不存在的 align——**复用图片段时要注意依赖闭包**，最终改为独立构造；③ eval 替身产物过不了真 ffprobe——runner 层打桩 probe_duration，文件存在性仍走真实 stat（真实 ffprobe 行为由 artifact/judge 用例覆盖）
+- **经验**：① 「计划即数据」的价值在拒绝非法计划时最直观——五类检查全是纯函数，不需要跑任何工具就能回答"能不能做"；② 拓扑分层（Kahn）顺带解决了"参考首图的镜头必须等待"——构建期把依赖挂上，排序自然正确，不需要特殊逻辑；③ 局部修改的范围正确性靠「构建器只生成受影响链路」+「protected 兜底」双层保证，单层都不够：前者防遗漏，后者防越界

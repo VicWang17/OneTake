@@ -1,0 +1,132 @@
+{
+  "runner": "evals/runners/context_cases.py",
+  "git_sha": "a2874aaa48ce2eba2b1230a8f5bbc6262ab7a4e8",
+  "run_at": "2026-10-05 20:52:06",
+  "layer": "deterministic (pure assembly, no api)",
+  "results": [
+    {
+      "case_id": "ctx-section-order",
+      "checks": [
+        {
+          "check": "order_is_priority",
+          "ok": true
+        },
+        {
+          "check": "all_sections_in_user",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "ctx-provenance",
+      "checks": [
+        {
+          "check": "brief_source_version",
+          "ok": true
+        },
+        {
+          "check": "skill_version",
+          "ok": true
+        },
+        {
+          "check": "feedback_marked_current",
+          "ok": true
+        },
+        {
+          "check": "tokens_est_positive",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "ctx-minimal",
+      "checks": [
+        {
+          "check": "topic_only",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "ctx-save-pack",
+      "checks": [
+        {
+          "check": "record_has_sections",
+          "ok": true
+        },
+        {
+          "check": "record_has_tokens",
+          "ok": true
+        },
+        {
+          "check": "no_full_text_on_disk",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "ctx-storyboard",
+      "checks": [
+        {
+          "check": "brief_and_outline_sections",
+          "ok": true
+        },
+        {
+          "check": "both_in_user",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "ctx-shot-image",
+      "checks": [
+        {
+          "check": "sections_complete",
+          "ok": true
+        },
+        {
+          "check": "no_character_drops_anchor",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "ctx-repair",
+      "checks": [
+        {
+          "check": "issue_section",
+          "ok": true
+        },
+        {
+          "check": "brief_section",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "ctx-externalize",
+      "checks": [
+        {
+          "check": "section_externalized",
+          "ok": true
+        },
+        {
+          "check": "summary_line_compact",
+          "ok": true
+        },
+        {
+          "check": "file_complete",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    }
+  ]
+}

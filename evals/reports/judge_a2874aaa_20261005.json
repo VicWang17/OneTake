@@ -1,0 +1,66 @@
+{
+  "runner": "evals/runners/judge_cases.py",
+  "git_sha": "a2874aaa48ce2eba2b1230a8f5bbc6262ab7a4e8",
+  "run_at": "2026-10-05 20:52:04",
+  "layer": "deterministic (monkeypatched vl/video, temp sqlite, no api)",
+  "results": [
+    {
+      "case_id": "qb-01-pass-on-retry",
+      "checks": [
+        {
+          "check": "switched_to_new_version",
+          "ok": true
+        },
+        {
+          "check": "switched_flag_recorded",
+          "ok": true
+        },
+        {
+          "check": "candidate_moved_not_copied",
+          "ok": true
+        },
+        {
+          "check": "quality_json_written",
+          "ok": true
+        }
+      ],
+      "result_summary": {
+        "pid": "pjudge",
+        "total": 1,
+        "passed": 1,
+        "first_pass_rate": 0.0,
+        "report": "/var/folders/69/phsbxgc514g8mvxjj17w53ch0000gn/T/tmpvhnc5ou7/pjudge/final/quality.json"
+      },
+      "verdict": "pass"
+    },
+    {
+      "case_id": "qb-01-always-fail",
+      "checks": [
+        {
+          "check": "old_version_retained",
+          "ok": true
+        },
+        {
+          "check": "failure_evidence_kept",
+          "ok": true
+        },
+        {
+          "check": "escalated_to_human",
+          "ok": true
+        },
+        {
+          "check": "quality_json_written",
+          "ok": true
+        }
+      ],
+      "result_summary": {
+        "pid": "pjudge",
+        "total": 1,
+        "passed": 0,
+        "first_pass_rate": 0.0,
+        "report": "/var/folders/69/phsbxgc514g8mvxjj17w53ch0000gn/T/tmp_554rqi5/pjudge/final/quality.json"
+      },
+      "verdict": "pass"
+    }
+  ]
+}

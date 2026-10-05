@@ -277,6 +277,69 @@ def videos(
 
 
 @app.command()
+def plan(
+    pid: str = typer.Option(..., "--pid", help="项目 ID"),
+    edit: str = typer.Option(None, "--edit",
+                             help="自然语言修改请求，如「第 3 镜画面改成…」「压缩到 45 秒」"),
+    budget: float = typer.Option(5.0, "--budget", help="本次修改预算上限（元）"),
+    execute: bool = typer.Option(False, "--execute", help="校验通过后立即执行"),
+):
+    """P2 结构化计划：把修改请求编译成节点 DAG，静态校验通过才允许执行。
+
+    不带 --execute 时只产出计划（执行前评审）；非法计划在工具执行前被拒绝。"""
+    import json as _json
+
+    from pipeline import plan as plan_mod
+
+    pdir = ROOT / "projects" / pid
+    script = _json.loads((pdir / "script.json").read_text(encoding="utf-8"))
+    n_shots = len(script["shots"])
+    if not edit:
+        raise typer.BadParameter("请提供 --edit 修改请求")
+    parsed = plan_mod.parse_edit_request(edit)
+    if not parsed:
+        typer.echo("无法解析修改意图，请换种说法（支持：第 N 镜画面/旁白、时长压缩）")
+        raise typer.Exit(code=1)
+
+    handlers = plan_mod.default_handlers()
+    for intent in parsed["intents"]:
+        if intent["kind"] == "shot_edit":
+            p = plan_mod.plan_shot_edit(pid, intent["shot"], n_shots, budget,
+                                        feedback=intent.get("feedback", ""))
+        elif intent["kind"] == "narration_edit":
+            p = plan_mod.plan_narration_edit(pid, intent["shot"], n_shots, budget,
+                                             new_text=intent.get("text", ""))
+        else:
+            p = plan_mod.plan_duration_adjust(pid, intent["target_s"], budget,
+                                              project_dir=pdir)
+        issues = plan_mod.validate_plan(p, pdir)
+        typer.echo(f"\n== 计划 {p.plan_id}（{p.kind}）：{p.goal} ==")
+        for lv, ids in enumerate(plan_mod.topo_levels(p)):
+            typer.echo(f"  层{lv}: {', '.join(ids)}")
+        if p.meta.get("dropped_shots"):
+            typer.echo(f"  删镜决策：删 {p.meta['dropped_shots']} · "
+                       f"留 {p.meta['kept_shots']} · 预计 {p.meta['est_duration']}s")
+        est = sum(n.cost_est for n in p.nodes)
+        typer.echo(f"  估算成本 ¥{est:.2f} / 预算 ¥{budget:.2f}")
+        if issues:
+            typer.echo("  ❌ 校验未通过，已拒绝执行：")
+            for i in issues:
+                typer.echo(f"    - {i}")
+            continue
+        plan_mod.save_plan(p, pdir)
+        if not execute:
+            typer.echo("  ✅ 校验通过（加 --execute 执行）")
+            continue
+        plan_mod.apply_duration_decision(p, pdir)
+        rep = plan_mod.execute_plan(p, handlers, pdir,
+                                    on_event=lambda e: typer.echo(
+                                        f"    [{e['event']}] {e.get('node', '')} "
+                                        f"{e.get('evidence', '')}"))
+        typer.echo(f"  结果：成功 {len(rep['succeeded'])} · 失败 {len(rep['failed'])}"
+                   f" · 跳过 {len(rep['skipped'])}")
+
+
+@app.command()
 def render(pid: str = typer.Option(..., "--pid", help="项目 ID")):
     """P2：EDL 时间线生成 + 渲染成片（粒度对齐 + 硬字幕 + BGM 人声闪避）。"""
     edl = edl_mod.build_edl(pid)

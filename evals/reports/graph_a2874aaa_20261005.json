@@ -1,0 +1,50 @@
+{
+  "runner": "evals/runners/graph_cases.py",
+  "git_sha": "a2874aaa48ce2eba2b1230a8f5bbc6262ab7a4e8",
+  "run_at": "2026-10-05 20:52:05",
+  "layer": "deterministic (monkeypatched storyboard/selector, no api)",
+  "results": [
+    {
+      "case_id": "graph-skill-auto",
+      "checks": [
+        {
+          "check": "selector_called",
+          "ok": true
+        },
+        {
+          "check": "skill_passed",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "graph-skill-forced",
+      "checks": [
+        {
+          "check": "selector_not_called",
+          "ok": true
+        },
+        {
+          "check": "skill_passed",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "graph-resume-loads",
+      "checks": [
+        {
+          "check": "no_create",
+          "ok": true
+        },
+        {
+          "check": "no_choose",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    }
+  ]
+}

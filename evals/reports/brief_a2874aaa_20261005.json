@@ -1,0 +1,78 @@
+{
+  "runner": "evals/runners/brief_cases.py",
+  "git_sha": "a2874aaa48ce2eba2b1230a8f5bbc6262ab7a4e8",
+  "run_at": "2026-10-05 20:52:06",
+  "layer": "deterministic (pure data structures, no api)",
+  "results": [
+    {
+      "case_id": "brief-override-memory",
+      "checks": [
+        {
+          "check": "current_request_wins",
+          "ok": true
+        },
+        {
+          "check": "conflict_logged",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "brief-priority-holds",
+      "checks": [
+        {
+          "check": "project_constraint_survives",
+          "ok": true
+        },
+        {
+          "check": "rejection_logged",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "brief-same-level-override",
+      "checks": [
+        {
+          "check": "latest_wins",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "brief-list-constraints",
+      "checks": [
+        {
+          "check": "dedup_single_entry",
+          "ok": true
+        },
+        {
+          "check": "forbidden_in_view",
+          "ok": true
+        },
+        {
+          "check": "required_in_view",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "brief-persistence",
+      "checks": [
+        {
+          "check": "roundtrip_equal",
+          "ok": true
+        },
+        {
+          "check": "changelog_preserved",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    }
+  ]
+}
