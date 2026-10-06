@@ -1,0 +1,248 @@
+{
+  "runner": "evals/runners/plan_cases.py",
+  "git_sha": "7b4fa82890c8016cc7f996c04632074bfcb7fd22",
+  "run_at": "2026-10-06 15:45:52",
+  "layer": "deterministic (fake handlers + real file checks, no api)",
+  "results": [
+    {
+      "case_id": "plan-create-structure",
+      "checks": [
+        {
+          "check": "storyboard_first",
+          "ok": true
+        },
+        {
+          "check": "ref_first_waits",
+          "ok": true
+        },
+        {
+          "check": "plain_shot_parallel_with_first",
+          "ok": true
+        },
+        {
+          "check": "video_waits_image_and_align",
+          "ok": true
+        },
+        {
+          "check": "render_last",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "le-01-shot-edit-scope",
+      "checks": [
+        {
+          "check": "scope_minimal",
+          "ok": true
+        },
+        {
+          "check": "only_shot3_nodes",
+          "ok": true
+        },
+        {
+          "check": "others_protected",
+          "ok": true
+        },
+        {
+          "check": "validate_passes",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "le-02-narration-edit-scope",
+      "checks": [
+        {
+          "check": "scope_audio_only",
+          "ok": true
+        },
+        {
+          "check": "own_visual_protected",
+          "ok": true
+        },
+        {
+          "check": "validate_passes",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "le-03-duration-adjust",
+      "checks": [
+        {
+          "check": "plan_before_execution",
+          "ok": true
+        },
+        {
+          "check": "drops_low_priority_and_tail",
+          "ok": true
+        },
+        {
+          "check": "est_within_target",
+          "ok": true
+        },
+        {
+          "check": "no_paid_nodes",
+          "ok": true
+        },
+        {
+          "check": "validate_passes",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "reject-unknown-capability",
+      "checks": [
+        {
+          "check": "rejected_with_reason",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "reject-circular-dependency",
+      "checks": [
+        {
+          "check": "rejected_with_reason",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "reject-missing-input",
+      "checks": [
+        {
+          "check": "rejected_with_reason",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "reject-over-budget",
+      "checks": [
+        {
+          "check": "rejected_with_reason",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "reject-protected-artifact",
+      "checks": [
+        {
+          "check": "rejected_with_reason",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "executor-gates-downstream",
+      "checks": [
+        {
+          "check": "upstream_ran",
+          "ok": true
+        },
+        {
+          "check": "failed_node",
+          "ok": true
+        },
+        {
+          "check": "downstream_skipped",
+          "ok": true
+        },
+        {
+          "check": "state_persisted",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "executor-retry-then-release",
+      "checks": [
+        {
+          "check": "all_succeeded",
+          "ok": true
+        },
+        {
+          "check": "retried",
+          "ok": true
+        },
+        {
+          "check": "order_respects_deps",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "rejected-plan-runs-nothing",
+      "checks": [
+        {
+          "check": "rejected",
+          "ok": true
+        },
+        {
+          "check": "no_handler_called",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "parse-edit-requests",
+      "checks": [
+        {
+          "check": "shot_edit",
+          "ok": true
+        },
+        {
+          "check": "narration_edit",
+          "ok": true
+        },
+        {
+          "check": "duration_adjust",
+          "ok": true
+        },
+        {
+          "check": "combo_union",
+          "ok": true
+        },
+        {
+          "check": "unparseable_returns_none",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "le-06-combo-union",
+      "checks": [
+        {
+          "check": "union_scope",
+          "ok": true
+        },
+        {
+          "check": "shot4_visual_not_protected_in_b",
+          "ok": true
+        },
+        {
+          "check": "shot2_visual_protected_in_a",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    }
+  ]
+}

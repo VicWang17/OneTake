@@ -1,0 +1,268 @@
+{
+  "runner": "evals/runners/execution_cases.py",
+  "git_sha": "7b4fa82890c8016cc7f996c04632074bfcb7fd22",
+  "run_at": "2026-10-06 15:45:52",
+  "layer": "deterministic (fake handlers + injected failures, no api)",
+  "results": [
+    {
+      "case_id": "task-ledger-persistence",
+      "checks": [
+        {
+          "check": "task_fields",
+          "ok": true
+        },
+        {
+          "check": "spent_tracked",
+          "ok": true
+        },
+        {
+          "check": "attempts_logged",
+          "ok": true
+        },
+        {
+          "check": "attempt_has_version_and_rationale",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "error-classification",
+      "checks": [
+        {
+          "check": "transient",
+          "ok": true
+        },
+        {
+          "check": "budget",
+          "ok": true
+        },
+        {
+          "check": "param",
+          "ok": true
+        },
+        {
+          "check": "artifact",
+          "ok": true
+        },
+        {
+          "check": "unknown",
+          "ok": true
+        },
+        {
+          "check": "strategy_map",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "param-repair-then-success",
+      "checks": [
+        {
+          "check": "repair_called",
+          "ok": true
+        },
+        {
+          "check": "node_recovered",
+          "ok": true
+        },
+        {
+          "check": "repair_logged",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "no-progress-escalation",
+      "checks": [
+        {
+          "check": "escalated_early",
+          "ok": true
+        },
+        {
+          "check": "downstream_skipped",
+          "ok": true
+        },
+        {
+          "check": "open_question_recorded",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "budget-circuit-breaker",
+      "checks": [
+        {
+          "check": "stops_at_budget",
+          "ok": true
+        },
+        {
+          "check": "spent_within_budget",
+          "ok": true
+        },
+        {
+          "check": "no_video_handler_call",
+          "ok": true
+        },
+        {
+          "check": "status",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "goal-change-invalidation",
+      "checks": [
+        {
+          "check": "shot2_chain_stale",
+          "ok": true
+        },
+        {
+          "check": "others_untouched",
+          "ok": true
+        },
+        {
+          "check": "version_bumped",
+          "ok": true
+        },
+        {
+          "check": "only_needed_redone",
+          "ok": true
+        },
+        {
+          "check": "align_reused",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "stale-attempt-guard",
+      "checks": [
+        {
+          "check": "result_discarded",
+          "ok": true
+        },
+        {
+          "check": "not_stamped_new_version",
+          "ok": true
+        },
+        {
+          "check": "discard_logged",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "crash-resume-reuses-upstream",
+      "checks": [
+        {
+          "check": "crashed_before_render",
+          "ok": true
+        },
+        {
+          "check": "upstream_reused",
+          "ok": true
+        },
+        {
+          "check": "only_render_redone",
+          "ok": true
+        },
+        {
+          "check": "final_success",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "confirmation-version-binding",
+      "checks": [
+        {
+          "check": "confirm_clears_pending",
+          "ok": true
+        },
+        {
+          "check": "regen_invalidates_confirmation",
+          "ok": true
+        },
+        {
+          "check": "reconfirm_clears",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "delivery-gates",
+      "checks": [
+        {
+          "check": "deliverable_when_clean",
+          "ok": true
+        },
+        {
+          "check": "four_checks_present",
+          "ok": true
+        },
+        {
+          "check": "edl_mismatch_caught",
+          "ok": true
+        },
+        {
+          "check": "check_has_version",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "resume-reviews-artifacts",
+      "checks": [
+        {
+          "check": "tamper_detected",
+          "ok": true
+        },
+        {
+          "check": "pending_listed",
+          "ok": true
+        },
+        {
+          "check": "open_questions_listed",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "acceptance-scenario",
+      "checks": [
+        {
+          "check": "round2_recovered_from_quality_failure",
+          "ok": true
+        },
+        {
+          "check": "round3_resumed_after_crash",
+          "ok": true
+        },
+        {
+          "check": "round3_reused_unaffected",
+          "ok": true
+        },
+        {
+          "check": "final_deliverable",
+          "ok": true
+        },
+        {
+          "check": "explainable",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    }
+  ]
+}

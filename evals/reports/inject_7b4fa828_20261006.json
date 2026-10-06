@@ -1,0 +1,72 @@
+{
+  "runner": "evals/runners/inject_cases.py",
+  "git_sha": "7b4fa82890c8016cc7f996c04632074bfcb7fd22",
+  "run_at": "2026-10-06 15:45:51",
+  "layer": "deterministic (monkeypatched outline/dao, no api)",
+  "results": [
+    {
+      "case_id": "inject-prompt-block",
+      "checks": [
+        {
+          "check": "has_duration",
+          "ok": true
+        },
+        {
+          "check": "has_style",
+          "ok": true
+        },
+        {
+          "check": "has_forbidden",
+          "ok": true
+        },
+        {
+          "check": "empty_brief_empty_block",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "inject-image-negative",
+      "checks": [
+        {
+          "check": "negative_appended",
+          "ok": true
+        },
+        {
+          "check": "anchors_preserved",
+          "ok": true
+        },
+        {
+          "check": "no_brief_no_negative",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "inject-outline-threading",
+      "checks": [
+        {
+          "check": "constraints_reach_outline",
+          "ok": true
+        },
+        {
+          "check": "constraint_right_after_topic",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "inject-brief-auto-load",
+      "checks": [
+        {
+          "check": "brief_json_auto_loaded",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    }
+  ]
+}

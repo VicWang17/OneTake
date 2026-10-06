@@ -1,0 +1,64 @@
+{
+  "runner": "evals/runners/memory_cases.py",
+  "git_sha": "7b4fa82890c8016cc7f996c04632074bfcb7fd22",
+  "run_at": "2026-10-06 15:45:52",
+  "layer": "deterministic (temp sqlite + monkeypatched llm, no api)",
+  "results": [
+    {
+      "case_id": "mem-scope-source",
+      "checks": [
+        {
+          "check": "scope_source_saved",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "mem-contradict-supersede",
+      "checks": [
+        {
+          "check": "old_superseded_by_new",
+          "ok": true
+        },
+        {
+          "check": "superseded_excluded",
+          "ok": true
+        },
+        {
+          "check": "audit_trail_kept",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "mem-scope-filter",
+      "checks": [
+        {
+          "check": "own_project_injected",
+          "ok": true
+        },
+        {
+          "check": "other_project_excluded",
+          "ok": true
+        },
+        {
+          "check": "global_injected",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    },
+    {
+      "case_id": "mem-migration",
+      "checks": [
+        {
+          "check": "migrated_defaults",
+          "ok": true
+        }
+      ],
+      "verdict": "pass"
+    }
+  ]
+}

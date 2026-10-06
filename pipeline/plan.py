@@ -429,7 +429,8 @@ def _skip_descendants(plan: Plan, nid: str, report: dict) -> None:
         changed = False
         for n in plan.nodes:
             if n.status == "pending" and any(
-                    plan.node(d).status in ("failed", "skipped")
+                    plan.node(d).status in ("failed", "skipped", "escalated",
+                                            "budget_stopped")
                     for d in n.depends_on):
                 n.status = "skipped"
                 report["skipped"].append(n.id)
